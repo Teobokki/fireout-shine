@@ -19,6 +19,8 @@ def init_fonts(loader, path, plain, jp):
         return f
     try:
         FONT = lf(path, 80, True); FONT_PLAIN = lf(plain, 64, False); JP = lf(jp, 64, True)
+        from panda3d.core import TextProperties, TextPropertiesManager
+        tp = TextProperties(); tp.set_font(JP); TextPropertiesManager.get_global_ptr().set_properties("jp", tp)   # inline "\1jp\1...\2" Japanese runs
     except Exception:
         FONT = FONT_PLAIN = JP = None
     return JP

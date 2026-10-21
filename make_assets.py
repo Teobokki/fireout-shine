@@ -28,7 +28,7 @@ from fontTools.ttLib import TTCollection
 import fs_lines
 chars = set("".join([j for _, j, _ in fs_lines.LINES_JA] + D.UI_JP + D.SIGNS_H + D.SIGNS_V + [D.HEROINE_JP] + [c["jp"] for c in D.CARS.values()]))
 chars |= set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ・ー-/:!?.,()+%▲▼◀▶●★☆¥&'\"*")
-chars |= set("".join(d[2] for d in D.DISTRICTS) + "".join(r["jp"] for r in D.RACES) + "新光灯港桜一時停止")
+chars |= set("".join(d[2] for d in D.DISTRICTS) + "".join(r["jp"] for r in D.RACES) + "新光灯港桜一時停止" + D.GET_WANTED_JP)
 f = TTCollection(CJK).fonts[0]
 opt = subset.Options(); opt.layout_features = ["*"]; opt.name_IDs = ["*"]; opt.notdef_outline = True
 sb = subset.Subsetter(opt); sb.populate(text="".join(sorted(chars))); sb.subset(f)

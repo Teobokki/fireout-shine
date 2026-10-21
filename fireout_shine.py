@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -463,7 +463,7 @@ class App(ShowBase):
         has = self.has_save()
         items = [("CONTINUE" if has else "PLAY", lambda: self.start_game(None), U.PINK),
                  ("QUICK RACE", lambda: self.start_game("sprint"), U.PINK),
-                 ("POLICE CHASE", lambda: self.start_game("chase"), (0.35, 0.45, 1, 1)),
+                 (D.GET_WANTED, lambda: self.start_game("chase"), (0.35, 0.45, 1, 1)),
                  ("FRGARAGE", lambda: self.start_game("garage"), U.CYAN),
                  ("SETTINGS", lambda: self.open_settings(self.show_menu), (0.6, 0.6, 0.7, 1)),
                  ("CREDITS", self.show_credits, (0.6, 0.6, 0.7, 1)),

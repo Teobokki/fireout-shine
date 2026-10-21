@@ -348,7 +348,7 @@ class Game:
     ICON = {"race": "R", "tt": "T", "chase": "P", "drift": "D", "garage": "G", "shop": "$", "home": "H",
             "hospital": "+", "tower": "A", "beach": "~", "speedcam": "S"}
     LEGEND = [("H", "ANA & DANIEL'S HOUSE (home)"), ("G", "FRGARAGE (paint & plates)"), ("R", "Street race"), ("T", "Time trial"),
-              ("D", "Drift zone"), ("P", "Police chase"), ("S", "Speed camera"), ("$", "KAZAN SUPPLY (ammo)"), ("+", "Hospital"),
+              ("D", "Drift zone"), ("P", D.GET_WANTED + " (police chase)"), ("S", "Speed camera"), ("$", "KAZAN SUPPLY (ammo)"), ("+", "Hospital"),
               ("A", "Shinko Tower (landmark)"), ("~", "HIKARI BEACH"), ("*", "Neon token"), ("X", "Waypoint")]
 
     def build_pois(self):
@@ -390,9 +390,9 @@ class Game:
         if aid == "home": self.enter_home(); return
         if aid == "chase":
             sx, sy, sh = D.CHASE_MISSION["start"]; self.ensure_in_car(sx, sy, sh)
-            self.activity = {"kind": "chase", "t": 0.0, "name": "HOT PURSUIT"}
+            self.activity = {"kind": "chase", "t": 0.0, "name": D.GET_WANTED}
             self.add_heat(3, "")
-            self.caption("HOT PURSUIT", "Lose the police - break their line of sight!", 3.0); return
+            self.caption(D.GET_WANTED, "Lose the police - break their line of sight!", 3.0); return
         if aid == "drift":
             sx, sy, sh = D.DRIFT_ZONE["start"]; self.ensure_in_car(sx, sy, sh)
             self.activity = {"kind": "drift", "t": D.DRIFT_ZONE["time"], "score": 0.0, "name": D.DRIFT_ZONE["name"], "count": 3.5}
@@ -1437,7 +1437,7 @@ class Game:
         elif act and act["kind"] == "tt" and act.get("count", 0) <= 0:
             self.race_t.setText("TIME TRIAL   CP %d/%d   %s / %s" % (act["cp"], len(act["cps"]), self.fmt(act["t"]), self.fmt(act["limit"])))
         elif act and act["kind"] == "chase":
-            self.race_t.setText("HOT PURSUIT  -  break line of sight   %s" % self.fmt(act["t"]))
+            self.race_t.setText(D.GET_WANTED + "  -  break line of sight   %s" % self.fmt(act["t"]))
         elif act and act["kind"] == "drift" and act.get("count", 0) <= 0:
             self.race_t.setText("DRIFT SCORE %d   %ds" % (act["score"], max(0, act["t"])))
         elif self.heat:

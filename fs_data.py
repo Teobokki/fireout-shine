@@ -75,7 +75,9 @@ RACES = [
 TIME_TRIAL = {"id": "tt", "name": "NEON DASH TIME TRIAL", "start": (-300.0, -200.0, 0.0), "time": 75.0,
               "cps": [(-300, 0), (-300, 300), (-100, 300), (0, 100), (0, -100), (200, -100), (200, -200), (300, -300), (400, -300), (460, -300)]}
 DRIFT_ZONE = {"id": "drift", "name": "BEACH DRIFT ZONE", "rect": (480.0, -330.0, 575.0, -220.0), "start": (520.0, -275.0, 0.0), "time": 60.0}
-CHASE_MISSION = {"id": "chase", "name": "HOT PURSUIT", "start": (-300.0, 300.0, 90.0)}
+GET_WANTED_JP = "\u6307\u540d\u624b\u914d\u3055\u308c\u308b"          # 指名手配される
+GET_WANTED = "\1jp\1" + GET_WANTED_JP + "\2 GET WANTED"              # display name of the police-chase activity (JP run in Noto Sans JP)
+CHASE_MISSION = {"id": "chase", "name": GET_WANTED, "start": (-300.0, 300.0, 90.0)}
 DELIVERY = {"id": "delivery", "name": "NIGHT COURIER", "start": (100.0, 300.0, 0.0),
             "drops": [(-300, -300), (460, 250), (-200, 400), (300, -100), (0, -400)]}
 SPEED_CAMS = [(-200.0, 50.0, "AKARI AVENUE"), (250.0, -400.0, "SAKURA BAYSIDE"), (460.0, 0.0, "COAST HIGHWAY"), (0.0, 350.0, "TOWER ROAD")]
