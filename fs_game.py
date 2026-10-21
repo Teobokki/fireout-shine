@@ -821,7 +821,7 @@ class Game:
             btn("BACK", lambda: self.phone_screen("home"), 0.81)
         if who == "ana":       # cracked glass drawn over everything, thin and translucent so the app text stays readable
             cr = OnscreenImage(parent=root, image=T("phone_ana_crack.png"), scale=(PW / 2, 1, PH / 2)); cr.set_transparency(TransparencyAttrib.M_alpha)
-            cr.set_color_scale(1, 1, 1, 0.75); cr.set_bin("gui-popup", 80)
+            cr.set_color_scale(1, 1, 1, 0.95); cr.set_bin("gui-popup", 80)
         self.phone.items = items; self.phone.sel = 0
         self.refresh_buttons()
 
@@ -1623,7 +1623,6 @@ class Game:
         self.arsenal.update(dt)
         self.pop_t -= dt
         if self.pop_t <= 0: self.pop_t = 0.5; self.populate()
-        if self.phone and self.pcar: self.toggle_phone()
         self.world.update(dt, self.time)
         for m in self.markers:
             if "np" in m: m["np"].set_h(self.time * 30)

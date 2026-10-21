@@ -44,6 +44,8 @@ load-display pandagl
 want-pstats false
 gl-coordinate-system default
 """)
+if os.environ.get("FS_WINSIZE"):       # test/QA override, e.g. FS_WINSIZE=1920x1080
+    loadPrcFileData("", "win-size " + os.environ["FS_WINSIZE"].replace("x", " "))
 if os.path.exists(_icon):
     loadPrcFileData("", "icon-filename " + Filename.from_os_specific(_icon).get_fullpath())
 

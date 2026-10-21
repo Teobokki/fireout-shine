@@ -6,7 +6,7 @@ OUTG = '/workspace/fireout-shine/assets/tex/'
 def wall_base(wall):
     img = wall.resize((SW, SH)).convert("RGBA")
     dark = Image.new("RGBA", (SW, SH), (6, 6, 14, 150)); img.alpha_composite(dark)      # dim so in-game app text stays readable
-    status_bar(img)
+    status_bar(img, time=" ")
     ImageDraw.Draw(img).rounded_rectangle([SW/2-150, SH-50, SW/2+150, SH-38], 6, fill=(255, 255, 255, 220))
     return img
 meta = {}

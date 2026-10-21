@@ -77,11 +77,11 @@ SUF = os.environ.get("FS_SUF", "")
 PLAN = [
     (0.2, lambda: None), (6.0, lambda: None),
     (0.1, lambda: app.show_title()), (0.3, lambda: None), (0.1, lambda: app.show_menu()), (0.3, lambda: None),
-    (0.1, lambda: app.start_game(None)), (0.6, lambda: sim(4.0)),
+    (0.1, lambda: app.start_game(None)), (0.6, lambda: sim(9.0)),
     (0.1, lambda: G().toggle_phone()), (0.2, lambda: shot("phone_ana_fixed" + SUF)),
     (0.1, lambda: G().phone_screen("contacts")), (0.2, lambda: shot("phone_contacts_fixed" + SUF)),
     (0.1, lambda: G().phone_screen("taxi")), (0.2, lambda: shot("phone_taxi_fixed" + SUF)),
-    (0.1, lambda: G().phone_screen("home")), (0.1, lambda: G().switch_char()), (0.1, lambda: sim(1.0)), (0.2, lambda: shot("phone_daniel_fixed" + SUF)),
+    (0.1, lambda: G().phone_screen("home")), (0.1, lambda: G().switch_char()), (0.1, lambda: sim(1.0)), (0.2, lambda: shot("phone_daniel_fixed" + SUF)), (0.1, lambda: G().phone_screen("contacts")), (0.2, lambda: shot("phone_daniel_contacts_fixed" + SUF)),
     (0.1, lambda: G().toggle_phone()), (0.1, lambda: G().switch_char()), (0.1, lambda: sim(1.0)),
     (0.1, lambda: G().enter_car(G().own)), (0.1, lambda: sim(2.0, lambda: drive(1.0, 0.0))), (0.1, lambda: G().toggle_phone()),
     (0.1, lambda: sim(1.0, lambda: drive(1.0, 0.0))), (0.2, lambda: shot("phone_driving_fixed" + SUF)), (0.1, stop_input),
