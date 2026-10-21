@@ -1,0 +1,544 @@
+{
+ "ambient": [
+  {
+   "file": "ambient_00.wav",
+   "district": "*",
+   "text": "I lost my book yesterday. I was reading it at the time.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_01.wav",
+   "district": "*",
+   "text": "My umbrella works great in the sun.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_02.wav",
+   "district": "*",
+   "text": "I'm late for my early meeting.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_03.wav",
+   "district": "*",
+   "text": "I bought a new phone so I could stare at it more efficiently.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_04.wav",
+   "district": "*",
+   "text": "I'm on a diet. Only snacks that glow in the dark.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_05.wav",
+   "district": "*",
+   "text": "My smart watch told me to relax. Now I'm stressed about relaxing.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_06.wav",
+   "district": "*",
+   "text": "I came out for fresh air. It's mostly neon.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_07.wav",
+   "district": "*",
+   "text": "I set ten alarms and still woke up on time. Weird.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_08.wav",
+   "district": "*",
+   "text": "I'm walking slowly so I can be late in style.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_09.wav",
+   "district": "*",
+   "text": "I tried to go to bed early. The city said no.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_10.wav",
+   "district": "*",
+   "text": "My cat has more followers than I do.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_11.wav",
+   "district": "*",
+   "text": "I'm saving money by window shopping. Every single window.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_12.wav",
+   "district": "*",
+   "text": "They said it would rain. It is, but only on me.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_13.wav",
+   "district": "*",
+   "text": "I always carry sunglasses. For the billboards.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_14.wav",
+   "district": "*",
+   "text": "I'm not lost. I'm exploring very confidently.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_15.wav",
+   "district": "*",
+   "text": "Nice car. Mine is a bicycle with dreams.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_16.wav",
+   "district": "*",
+   "text": "Did you see that? Me neither, it was too fast.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_17.wav",
+   "district": "*",
+   "text": "I left my keys at home. Which is fine. I live on the bus.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_18.wav",
+   "district": "*",
+   "text": "This crosswalk is my cardio.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_19.wav",
+   "district": "*",
+   "text": "Wow, a quiet night in the city. Said nobody, ever.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_20.wav",
+   "district": "crossing",
+   "text": "I came to the big crossing to meet a friend. All ten thousand of them.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_21.wav",
+   "district": "crossing",
+   "text": "I've been waiting for the green light since lunch.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_22.wav",
+   "district": "crossing",
+   "text": "The giant screen said smile. So I'm smiling. Professionally.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_23.wav",
+   "district": "crossing",
+   "text": "I love crowds. Especially when they go home.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_24.wav",
+   "district": "akari",
+   "text": "Every sign here is shouting, and I'm whispering back.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_25.wav",
+   "district": "akari",
+   "text": "I came for ramen and stayed for three more ramens.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_26.wav",
+   "district": "akari",
+   "text": "The lights are so bright I can read my mind.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_27.wav",
+   "district": "akari",
+   "text": "Karaoke at midnight is just yelling with a schedule.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_28.wav",
+   "district": "kurogane",
+   "text": "The docks are peaceful. Except for everything.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_29.wav",
+   "district": "kurogane",
+   "text": "I work in shipping. I ship myself home every night.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_30.wav",
+   "district": "kurogane",
+   "text": "That container has been here so long it has a mailbox.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_31.wav",
+   "district": "tower",
+   "text": "I climbed the tower once. The elevator did most of it.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_32.wav",
+   "district": "tower",
+   "text": "From the top you can see the whole city. And my apartment. Still messy.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_33.wav",
+   "district": "tower",
+   "text": "I'm afraid of heights, so I only look at the tower from below.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_34.wav",
+   "district": "sakura",
+   "text": "It's quiet here. Even the vending machines whisper.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_35.wav",
+   "district": "sakura",
+   "text": "My neighbour waters his plastic flowers every morning.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_36.wav",
+   "district": "sakura",
+   "text": "I moved here for the cherry trees. They're very punctual.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_37.wav",
+   "district": "beach",
+   "text": "I came to the beach to get away from sand at home.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_38.wav",
+   "district": "beach",
+   "text": "Perfect night for a tan. Moon tan.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_39.wav",
+   "district": "beach",
+   "text": "I built a sandcastle. Rent is still too high.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_40.wav",
+   "district": "beach",
+   "text": "The sea is great. Very wet, though.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_41.wav",
+   "district": "beach",
+   "text": "I'm on vacation. From my vacation.",
+   "voice": 1
+  },
+  {
+   "file": "ambient_42.wav",
+   "district": "beach",
+   "text": "I brought sunscreen for the night. You can never be too careful.",
+   "voice": 2
+  },
+  {
+   "file": "ambient_43.wav",
+   "district": "*",
+   "text": "Careful driving! I just got these shoes.",
+   "voice": 3
+  },
+  {
+   "file": "ambient_44.wav",
+   "district": "*",
+   "text": "I'm an influencer. I influence pigeons, mostly.",
+   "voice": 4
+  },
+  {
+   "file": "ambient_45.wav",
+   "district": "*",
+   "text": "Is that Ana? I heard she drives faster than the news.",
+   "voice": 0
+  },
+  {
+   "file": "ambient_46.wav",
+   "district": "*",
+   "text": "Hi Ana! Love the haircut!",
+   "voice": 1
+  },
+  {
+   "file": "ambient_47.wav",
+   "district": "*",
+   "text": "Traffic is terrible. I love it. It's like a parade that honks.",
+   "voice": 2
+  }
+ ],
+ "scared": [
+  {
+   "file": "scared_00.wav",
+   "district": "*",
+   "text": "Hey! I was walking there!",
+   "voice": 0
+  },
+  {
+   "file": "scared_01.wav",
+   "district": "*",
+   "text": "My shoes! Not again!",
+   "voice": 1
+  },
+  {
+   "file": "scared_02.wav",
+   "district": "*",
+   "text": "Somebody call a taxi, but a slower one!",
+   "voice": 2
+  },
+  {
+   "file": "scared_03.wav",
+   "district": "*",
+   "text": "Whoa! I'm writing a strongly worded letter!",
+   "voice": 3
+  },
+  {
+   "file": "scared_04.wav",
+   "district": "*",
+   "text": "That was my favourite sidewalk!",
+   "voice": 4
+  }
+ ],
+ "jacked": [
+  {
+   "file": "jacked_00.wav",
+   "district": "*",
+   "text": "Hey! That's my car!",
+   "voice": 0
+  },
+  {
+   "file": "jacked_01.wav",
+   "district": "*",
+   "text": "I just washed that!",
+   "voice": 1
+  },
+  {
+   "file": "jacked_02.wav",
+   "district": "*",
+   "text": "Fine! I'll walk. Again.",
+   "voice": 2
+  }
+ ],
+ "banter": [
+  {
+   "file": "banter_00.wav",
+   "who": "ana",
+   "text": "Daniel, seatbelt. I mean it."
+  },
+  {
+   "file": "banter_01.wav",
+   "who": "daniel",
+   "text": "Ana, that was a red light. I think. It was very fast."
+  },
+  {
+   "file": "banter_02.wav",
+   "who": "ana",
+   "text": "This city never sleeps. Neither do we, apparently."
+  },
+  {
+   "file": "banter_03.wav",
+   "who": "daniel",
+   "text": "Can we stop for ramen after this?"
+  },
+  {
+   "file": "banter_04.wav",
+   "who": "ana",
+   "text": "Hold on, I know a shortcut."
+  },
+  {
+   "file": "banter_05.wav",
+   "who": "daniel",
+   "text": "Your shortcuts are always longer, Ana."
+  },
+  {
+   "file": "banter_06.wav",
+   "who": "daniel",
+   "text": "Nice driving. My heart rate disagrees."
+  },
+  {
+   "file": "banter_07.wav",
+   "who": "ana",
+   "text": "Daniel, stop pressing the imaginary brake."
+  }
+ ],
+ "ja": [
+  {
+   "file": "ja_00.wav",
+   "district": "*",
+   "text": "昨日、本をなくしちゃった。読んでる途中だったのに。",
+   "en": "I lost my book yesterday. I was in the middle of it."
+  },
+  {
+   "file": "ja_01.wav",
+   "district": "*",
+   "text": "今日はいい天気だね。夜だけど。",
+   "en": "Nice weather today. Even though it's night."
+  },
+  {
+   "file": "ja_02.wav",
+   "district": "*",
+   "text": "ラーメン食べたいな。さっき食べたけど。",
+   "en": "I want ramen. I just had some, though."
+  },
+  {
+   "file": "ja_03.wav",
+   "district": "*",
+   "text": "早めに出たのに、また遅刻しそう。",
+   "en": "I left early, and I'm still going to be late."
+  },
+  {
+   "file": "ja_04.wav",
+   "district": "*",
+   "text": "傘を持ってきたら、雨がやんじゃった。",
+   "en": "I brought an umbrella, so the rain stopped."
+  },
+  {
+   "file": "ja_05.wav",
+   "district": "*",
+   "text": "このあたり、ネオンで夜が明るすぎるね。",
+   "en": "The neon makes the night way too bright around here."
+  },
+  {
+   "file": "ja_06.wav",
+   "district": "*",
+   "text": "スマホの充電、あと一パーセント。ドキドキする。",
+   "en": "One percent battery left. So exciting."
+  },
+  {
+   "file": "ja_07.wav",
+   "district": "*",
+   "text": "今夜は早く寝るつもり。たぶん。",
+   "en": "I'm going to bed early tonight. Probably."
+  },
+  {
+   "file": "ja_08.wav",
+   "district": "*",
+   "text": "かっこいい車だね！気をつけて運転してね。",
+   "en": "Cool car! Drive safely, okay?"
+  },
+  {
+   "file": "ja_09.wav",
+   "district": "*",
+   "text": "コンビニに行ったら、欲しいものが全部あった。困る。",
+   "en": "The convenience store had everything I wanted. Dangerous."
+  },
+  {
+   "file": "ja_10.wav",
+   "district": "*",
+   "text": "あれ、アナさんだ！こんばんは！",
+   "en": "Oh, it's Ana! Good evening!"
+  },
+  {
+   "file": "ja_11.wav",
+   "district": "*",
+   "text": "アナさんの車、今日もピカピカだね。",
+   "en": "Ana's car is shiny again today."
+  },
+  {
+   "file": "ja_12.wav",
+   "district": "crossing",
+   "text": "この交差点、何回渡っても迷っちゃう。",
+   "en": "No matter how many times I cross here, I get lost."
+  },
+  {
+   "file": "ja_13.wav",
+   "district": "crossing",
+   "text": "大きな画面、ずっと見ちゃうね。",
+   "en": "I can't stop looking at the giant screen."
+  },
+  {
+   "file": "ja_14.wav",
+   "district": "akari",
+   "text": "灯町のラーメン屋さん、全部行ってみたい。",
+   "en": "I want to try every ramen shop in Akari-cho."
+  },
+  {
+   "file": "ja_15.wav",
+   "district": "akari",
+   "text": "カラオケで歌いすぎて、声がなくなりそう。",
+   "en": "I sang so much karaoke I might lose my voice."
+  },
+  {
+   "file": "ja_16.wav",
+   "district": "kurogane",
+   "text": "港の風、気持ちいいね。",
+   "en": "The breeze from the harbour feels nice."
+  },
+  {
+   "file": "ja_17.wav",
+   "district": "kurogane",
+   "text": "あのコンテナ、ずっと同じ場所にあるね。",
+   "en": "That container has been in the same spot forever."
+  },
+  {
+   "file": "ja_18.wav",
+   "district": "tower",
+   "text": "タワーの上から見る夜景、最高だよ。",
+   "en": "The night view from the top of the tower is the best."
+  },
+  {
+   "file": "ja_19.wav",
+   "district": "tower",
+   "text": "エレベーターが速すぎて、耳がびっくりした。",
+   "en": "The elevator was so fast my ears were surprised."
+  },
+  {
+   "file": "ja_20.wav",
+   "district": "sakura",
+   "text": "桜台は静かで、落ち着くね。",
+   "en": "Sakuradai is quiet and relaxing."
+  },
+  {
+   "file": "ja_21.wav",
+   "district": "sakura",
+   "text": "自販機と話してたら、もう夜中だった。",
+   "en": "I was chatting with the vending machine and now it's midnight."
+  },
+  {
+   "file": "ja_22.wav",
+   "district": "beach",
+   "text": "夜の海もきれいだね。",
+   "en": "The sea is beautiful at night too."
+  },
+  {
+   "file": "ja_23.wav",
+   "district": "beach",
+   "text": "砂のお城を作ったけど、波に持っていかれた。",
+   "en": "I built a sandcastle, but the waves took it."
+  },
+  {
+   "file": "ja_24.wav",
+   "district": "beach",
+   "text": "夏が終わっても、ビーチは楽しいよ。",
+   "en": "Even after summer, the beach is fun."
+  },
+  {
+   "file": "ja_25.wav",
+   "district": "beach",
+   "text": "サンダルの中、砂だらけ。",
+   "en": "My sandals are full of sand."
+  }
+ ]
+}

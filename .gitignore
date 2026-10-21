@@ -1,0 +1,9 @@
+__pycache__/
+build/
+build_onefile/
+dist/
+dist_onefile/
+*.log
+assets/models/*.glb
+*.blend1
+reference/
