@@ -178,6 +178,8 @@ class App(ShowBase):
         self.world = None; self.stage = None
         self.task_mgr.add(self._frame, "app-frame", sort=50)
         self.show_splash()
+        if os.environ.get("FS_SMOKE") == "money":          # built-in release smoke test (works in the frozen exe; runs a fixed sequence only)
+            self.do_method_later(1.0, self._smoke_money, "fs-smoke")
         ts = os.environ.get("FS_TESTSCRIPT")
         if ts and not getattr(sys, "frozen", False):
             self.do_method_later(float(os.environ.get("FS_TESTDELAY", "1")),
@@ -534,6 +536,43 @@ class App(ShowBase):
             self.game.destroy(); self.game = None
         self.camLens.set_fov(70); self.flyover = True
         self.show_menu()
+
+    def _smoke_money(self, task):
+        out = os.environ.get("FS_SMOKE_OUT", os.path.join(BASE, "docs"))
+        log = open(os.path.join(out, "smoke_money.log"), "a", encoding="utf-8")
+        def L(*a): log.write(" ".join(str(x) for x in a) + "\n"); log.flush()
+        def shot(n):
+            self.graphicsEngine.render_frame(); self.graphicsEngine.render_frame()
+            self.win.save_screenshot(Filename.from_os_specific(os.path.join(out, n + ".png"))); L("shot", n)
+        st = {"i": 0, "t": 0.0}
+        def drive():
+            g = self.game; g.vb["v_up"] = True
+        def m_try(t):
+            m = self.money_ui; m.ent.enterText(t); m.do_add(); L("add", repr(t), "->", m.msg["text"], "cash", self.game.cash)
+        steps = [
+            (7.0, lambda: (self.show_title(), )), (1.0, self.show_menu), (1.0, lambda: self.start_game(None)),
+            (10.0, lambda: self.game.enter_car(self.game.own)), (1.0, drive), (2.0, lambda: self.game.toggle_phone()),
+            (1.5, lambda: shot("phone_driving_v102")), (0.2, lambda: (self.game.vb.clear(), self.game.toggle_phone())),
+            (1.5, self.show_pause), (0.6, lambda: shot("pause_menu_v102")), (0.3, self.show_add_money),
+            (0.3, lambda: [m_try(t) for t in ("-5", "abc", "0", "", "1,000,000")]),
+            (0.3, lambda: (self.money_ui.quick(10 ** 9), self.money_ui.quick(10 ** 6), self.money_ui.quick(1000))),
+            (0.6, lambda: shot("add_money")), (0.3, lambda: self.money_ui.do_add()),
+            (0.5, lambda: m_try("500000000000")), (0.5, lambda: m_try("1")), (0.6, lambda: shot("cash_limit")),
+            (0.3, lambda: L("saved", (self.load_save() or {}).get("cash"))),
+            (0.3, self.hide_pause), (0.1, lambda: (setattr(self.game, "cash_pop_k", 2.6), self.game.cash_pop.setText("+¥98,997,996,500"))),
+            (0.8, lambda: (L("hud", self.game.cash_t["text"]), shot("cash_hud"))), (0.5, lambda: (L("SMOKE OK"), self.userExit())),
+        ]
+        def run(t):
+            try:
+                if self.world is None and st["i"] > 2: return t.cont
+                st["t"] += globalClock.get_dt()
+                if st["i"] < len(steps) and st["t"] >= steps[st["i"]][0]:
+                    st["t"] = 0.0; f = steps[st["i"]][1]; st["i"] += 1; f()
+            except Exception:
+                import traceback; L("ERR", traceback.format_exc()); st["i"] += 1
+            return t.cont
+        self.task_mgr.add(run, "fs-smoke-run", sort=100)
+        return task.done
 
     # ---------------------------------------------------------------- pause
     def show_pause(self):
