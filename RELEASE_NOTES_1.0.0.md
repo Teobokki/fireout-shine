@@ -10,11 +10,16 @@ First release. ©2026 EX Inc./HYPERION DIGITAL ©2026
 - Play as ANA or DANIEL (switch with Q); your partner always comes with you
 - ANA & DANIEL'S HOUSE: home with carport where the game starts and you respawn; sleep (skip time + save), save, and a WARDROBE for ANA (Default, Crop Top, Bikini, Police — the TOKYO NEON PD uniform makes heat build a little slower)
 - Take any car (F), street races with AI rivals, time trial, drift zone, HOT PURSUIT police chases with heat stars
-- FRGARAGE paint + custom plates, EX IX G9 phone with Emergency Services and JP TAXI (incl. HOME)
+- FRGARAGE: car selector (supercar, JDM coupe, DEBAUCHE sedan, hatchback, SUV/van) with stats, per-car paint + custom plates
+- RESET CAR DAMAGE (J / on-screen / pause menu), CAPITULATED and BUSTED screens with respawn at home
+- Shower at home (health refills), clear ANA / DANIEL switch portraits
+- Map waypoints (click the full map), districts and points of interest on map/minimap
+- EX IX G9 phone with Emergency Services and JP TAXI (incl. HOME)
 - Weapon wheel (hold Tab): fists, bat, pickaxe, taser, pistol, SMG, shotgun (non-gory)
 - English + Japanese voiced street chatter with subtitles, on-screen buttons, keyboard/mouse/gamepad
 
 ## Known limitations (planned for v1.0.1)
+- In-car radio, GPS route line and the HONOO RAMEN restaurant are not in v1.0.0
 - Switch portrait does not yet change with ANA's outfit
 - Interior is a single compact set (living room, kitchen, bedroom)
 - Software-rendered/older GPUs may need Graphics: LOW

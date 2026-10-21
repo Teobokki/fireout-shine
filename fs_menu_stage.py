@@ -14,8 +14,9 @@ class Stage:
     def __init__(self, app):
         g = self.g = _Stub(app)
         save = app.load_save() or {}
-        cfg = (save.get("cars") or {}).get("gts", {})
-        self.car = Car(g, "gts", -1.2, -40.0, 28.0, tuple(cfg.get("paint", (0.20, 0.22, 0.28))), cfg.get("plate", "SHINE 01"), True, "player")
+        kind = save.get("car", "gts") if save.get("car") in ("gts", "coupe", "sedan", "hatch", "kei", "suv", "van") else "gts"
+        cfg = (save.get("cars") or {}).get(kind, {})
+        self.car = Car(g, kind, -1.2, -40.0, 28.0, tuple(cfg.get("paint", (0.20, 0.22, 0.28))), cfg.get("plate", "SHINE 01"), True, "player")
         self.car.sync(0.0)
         self.ana = Person(g, "ana", 1.9, -42.6, 200.0)
         self.dan = Person(g, "daniel", 3.0, -41.4, 165.0)

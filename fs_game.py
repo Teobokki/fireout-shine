@@ -7,6 +7,8 @@ from direct.gui.OnscreenImage import OnscreenImage
 import fs_data as D
 import fs_ui as U
 from fs_vehicle import Car, collide_cars, TRAFFIC_KINDS, TRAFFIC_COLS
+PLAYER_CARS = ["gts", "coupe", "sedan", "hatch", "kei", "suv", "van"]   # FRGARAGE car selector (original designs)
+CAR_TYPES = {"gts": "Supercar", "coupe": "JDM coupe", "sedan": "Sedan (4-door)", "hatch": "Hatchback", "kei": "Kei car", "suv": "SUV", "van": "Van"}
 from fs_people import Person, Ped
 from fs_ai import TrafficAI, RacerAI, PoliceAI, ResponderAI, graph_path, wrap
 
@@ -33,10 +35,11 @@ class Game:
         self.garage = None; self.cp_np = None; self._cam_cd = 0.0; self.lb_on = False; self.lb_k = 0.0
         self.outfit = sd.get("outfit", "default") if sd.get("outfit") in ("default", "crop", "bikini", "police") else "default"
         self.home = None
+        self.player_kind = sd.get("car", "gts") if sd.get("car") in PLAYER_CARS else "gts"
         x, y, h = D.SPAWN
         self.chars = {"ana": Person(self, "ana", x - 1.0, y - 4.0, 180), "daniel": Person(self, "daniel", x + 1.0, y - 4.2, 180)}
         self.pcar = None
-        self.own = self.spawn_car("gts", x, y, h, role="player", parked=True); self.own.owned = True
+        self.own = self.spawn_car(self.player_kind, x, y, h, role="player", parked=True); self.own.owned = True
         self.time_scale = 1.0; self.tod = 14.5
         self.markers = []; self.spawn_markers(); self.build_pois(); self.build_hud(); self.bind_keys()
         self.arsenal = Arsenal(self, sd); self.btn_state = None
@@ -370,7 +373,7 @@ class Game:
         if c is None:
             c = self.own
             if c is None or c.dead or c not in self.cars:
-                c = self.own = self.spawn_car("gts", x, y, h, role="player"); c.owned = True
+                c = self.own = self.spawn_car(self.player_kind, x, y, h, role="player"); c.owned = True
             self.enter_car(c)
         for o in self.cars_near(x, y, 7):
             if o is not c and not getattr(o, "racer", False) and o not in (self.taxi, self.medic): self.remove_car(o)
@@ -1106,9 +1109,43 @@ class Game:
                                        command=self.garage_plate, focus=0)
         self.plate_entry["width"] = 8
         U.button(o, "APPLY PLATE", (0, -0.18), lambda: self.garage_plate(self.plate_entry.get()), w=0.3, h=0.05, scale=0.036)
-        U.button(o, "SAVE & EXIT", (0, -0.62), self.close_garage, w=0.3, h=0.06, scale=0.042, edge=U.CYAN, hint="Esc")
-        U.text(o, "Drag-free turntable: the camera orbits automatically", (0, -0.36), 0.024, font=U.FONT_PLAIN, wrap=28, fg=(1, 1, 1, 0.6))
+        U.button(o, "SAVE & EXIT", (0, -0.66), self.close_garage, w=0.3, h=0.06, scale=0.042, edge=U.CYAN, hint="Esc")
+        U.text(o, "CAR", (-0.38, -0.27), 0.04, fg=U.PINK, align=TextNode.A_left)
+        U.button(o, "< PREV", (-0.27, -0.35), lambda: self.garage_swap(-1), w=0.1, h=0.04, scale=0.03)
+        U.button(o, "NEXT >", (0.27, -0.35), lambda: self.garage_swap(1), w=0.1, h=0.04, scale=0.03)
+        self._g_name = U.text(o, "", (0, -0.36), 0.032, fg=U.CYAN)
+        self._g_stats = U.text(o, "", (0, -0.415), 0.022, font=U.FONT_PLAIN)
+        self._g_sel = U.button(o, "SELECT THIS CAR", (0, -0.54), self.garage_select, w=0.22, h=0.04, scale=0.03, edge=U.GOLD)
+        self.garage_info()
         self.letterbox(False); self.refresh_buttons(); self.app.sfx("door", 0.5)
+
+    def garage_info(self):
+        g = self.garage; c = g["car"]; s = c.spec
+        bar = lambda v: "|" * max(1, int(round(v * 10))) + "." * max(0, 10 - int(round(v * 10)))
+        self._g_name.setText(s["name"])
+        self._g_stats.setText("Type: %s   (%d/%d)\nSPEED %s   ACCEL %s   HANDLING %s%s" % (CAR_TYPES.get(c.kind, ""), PLAYER_CARS.index(c.kind) + 1 if c.kind in PLAYER_CARS else 0, len(PLAYER_CARS), bar(s["vmax"] / 74.0), bar(s["acc"] / 13.5), bar(s["grip"] / 9.5),
+                                                                       "\n(your car)" if c.kind == self.player_kind else ""))
+
+    def garage_swap(self, d):
+        g = self.garage
+        if not g: return
+        old = g["car"]; cfg = self.cars_cfg.get(old.kind, {}); cfg.update({"paint": list(g["paint"]), "plate": g["plate"]}); self.cars_cfg[old.kind] = cfg
+        kinds = PLAYER_CARS; k = kinds[(kinds.index(old.kind) + d) % len(kinds)] if old.kind in kinds else kinds[0]
+        x, y, h = old.x, old.y, old.h
+        was_own = old is self.own; self.remove_car(old)
+        c = self.spawn_car(k, x, y, h, role="player"); c.owned = True; c.vx = c.vy = 0
+        if was_own: self.own = c
+        self.pcar_saved = c
+        cf = self.cars_cfg.get(k, {}); g["car"] = c; g["paint"] = tuple(cf.get("paint", c.paint_col)); g["plate"] = cf.get("plate", c.plate_text)
+        try: self.plate_entry.enterText(g["plate"])
+        except Exception: pass
+        self.garage_info(); self.app.sfx("click", 0.6)
+
+    def garage_select(self):
+        g = self.garage
+        if not g: return
+        self.player_kind = g["car"].kind; self.own = g["car"]; self.save(); self.garage_info()
+        self.toast("%s is now your car" % g["car"].spec["name"]); self.app.sfx("checkpoint", 0.5)
 
     def garage_paint(self, col):
         g = self.garage
@@ -1208,11 +1245,11 @@ class Game:
         self.speed_t = U.text(br, "0", (-0.48, 0.64), 0.11, fg=(1, 1, 1, 1), align=TextNode.A_right)
         self.kmh_t = U.text(br, "km/h", (-0.46, 0.64), 0.035, fg=U.CYAN, align=TextNode.A_left)
         self.nitro_bar = U.bar(br, (-0.78, 0.6), 0.5, 0.012, 1.0, col=U.CYAN)
-        self.hp_bar = U.bar(a.a2dTopLeft, (0.06, -0.33), 0.4, 0.01, 1.0, col=(0.3, 1, 0.45, 1))
+        self.hp_bar = U.bar(a.a2dTopLeft, (0.06, -0.47), 0.4, 0.01, 1.0, col=(0.3, 1, 0.45, 1))
         # top-left status
         tl = a.a2dTopLeft
-        self.cash_t = U.text(tl, "", (0.06, -0.4), 0.05, fg=U.GOLD, align=TextNode.A_left)
-        self.stars_t = U.text(tl, "", (0.06, -0.47), 0.06, fg=(1, 0.85, 0.2, 1), align=TextNode.A_left, font=a.jpfont)
+        self.cash_t = U.text(tl, "", (0.06, -0.54), 0.05, fg=U.GOLD, align=TextNode.A_left)
+        self.stars_t = U.text(tl, "", (0.06, -0.61), 0.06, fg=(1, 0.85, 0.2, 1), align=TextNode.A_left, font=a.jpfont)
         self.race_t = U.text(a.a2dTopCenter, "", (0, -0.1), 0.05, fg=(1, 1, 1, 1))
         self.big = U.text(a.aspect2d, "", (0, 0.15), 0.22, fg=U.PINK)
         self.prompt = U.text(a.aspect2d, "", (0, -0.55), 0.045, fg=(1, 1, 1, 1))
@@ -1257,12 +1294,16 @@ class Game:
         U.button(tl, "MENU", (0.13, -0.07), self.key_esc, hint="Esc", **sm)
         U.button(tl, "MAP", (0.36, -0.07), self.toggle_map, hint="M", **sm)
         U.button(tl, "PHONE", (0.59, -0.07), self.toggle_phone, hint="T", edge=self.accent(), **sm)
-        sw = U.button(tl, "", (0.25, -0.2), self.switch_char, w=0.2, h=0.07, scale=0.03, hint="Q", edge=self.accent())
-        for k, who in enumerate((self.active, "daniel" if self.active == "ana" else "ana")):
+        sw = U.button(tl, "", (0.25, -0.28), self.switch_char, w=0.21, h=0.15, scale=0.03, hint="Q", edge=self.accent())
+        for k, who in enumerate(("ana", "daniel")):
+            x = -0.1 + k * 0.2; on = who == self.active
+            DirectFrame(parent=sw, frameColor=(0.3, 1.0, 1.0, 1) if on else (0.35, 0.35, 0.42, 1),
+                        frameSize=(-0.092, 0.092, -0.092, 0.092), pos=(x, 0, 0.025), relief=DGG.FLAT)
             try:
-                OnscreenImage(parent=sw, image=self.portrait(who), pos=(-0.13 + k * 0.1, 0, 0), scale=0.055 if k == 0 else 0.04)
+                im = OnscreenImage(parent=sw, image=self.portrait(who), pos=(x, 0, 0.025), scale=0.085)
+                if not on: im.set_color_scale(0.6, 0.6, 0.65, 1)
             except Exception: pass
-        U.text(sw, "SWITCH", (0.11, -0.012), 0.032)
+            U.text(sw, NAMES[who], (x, -0.125), 0.032, fg=(0.3, 1.0, 1.0, 1) if on else (0.8, 0.8, 0.85, 1))
         if self.ride:
             br = DirectFrame(parent=a.a2dBottomRight, frameColor=(0, 0, 0, 0)); self.btn_nodes.append(br)
             if self.ride.get("mode") == "riding":
@@ -1594,7 +1635,7 @@ class Game:
     # ================================================================ persistence
     def save(self):
         d = {"cash": self.cash, "tokens": [list(t) for t in self.tokens], "best": self.best, "cars": self.cars_cfg,
-             "speedcams": self.cam_cams, "active": self.active, "outfit": self.outfit, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": [NAMES["ana"], NAMES["daniel"]], "version": self.app.VERSION}
+             "speedcams": self.cam_cams, "active": self.active, "outfit": self.outfit, "car": self.player_kind, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": [NAMES["ana"], NAMES["daniel"]], "version": self.app.VERSION}
         try: self.app.write_save(d)
         except Exception as e: self.app.log_error(e)
 

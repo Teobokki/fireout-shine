@@ -7,7 +7,7 @@ import fs_shaders
 SPECS = {   # accel m/s2, vmax m/s, grip, mass, half length, half width, roof height, seat x
     "gts":    dict(acc=13.5, vmax=74.0, grip=9.5, mass=1350, hl=2.28, hw=1.0, roof=1.15, name="KAGEROU GT-S"),
     "coupe":  dict(acc=11.5, vmax=66.0, grip=8.5, mass=1300, hl=2.20, hw=0.93, roof=1.30, name="RAIJIN R9"),
-    "sedan":  dict(acc=8.0, vmax=52.0, grip=7.0, mass=1450, hl=2.38, hw=0.91, roof=1.45, name="MIRAI SEDAN"),
+    "sedan":  dict(acc=8.0, vmax=52.0, grip=7.0, mass=1450, hl=2.38, hw=0.91, roof=1.45, name="DEBAUCHE"),
     "taxi":   dict(acc=8.0, vmax=52.0, grip=7.0, mass=1450, hl=2.30, hw=0.88, roof=1.52, name="TOKO TAXI"),
     "police": dict(acc=11.0, vmax=68.0, grip=8.5, mass=1550, hl=2.43, hw=0.93, roof=1.47, name="PATROL INTERCEPTOR"),
     "hatch":  dict(acc=8.5, vmax=50.0, grip=7.5, mass=1150, hl=1.95, hw=0.87, roof=1.50, name="POCO HATCH"),
