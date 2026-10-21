@@ -7,3 +7,5 @@
 ## Changes
 - The police chase activity is now called **指名手配される GET WANTED**: main menu, map marker and legend, activity start banner, HUD timer and on-screen prompt
 - Japanese font updated so the new name renders correctly
+- Fixed the in-game EX IX G9 phone not showing: ANA now has her blue phone with the cracked screen and DANIEL his apple-green one. The home screen shows Contacts (Emergency Services, JP Taxi) and the JP TAXI app, the phone swaps when you switch character, and it works while driving
+- New FIREOUT SHINE key art on the title screen and a new icon
