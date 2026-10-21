@@ -301,6 +301,7 @@ class Game:
         self.cinematic = 0.8
         self.toast("Now playing as %s" % NAMES[self.active]); self.app.sfx("switch", 0.7)
         self.update_portraits()
+        if self.phone: self.phone_screen(getattr(self.phone, "which", "home"))     # the phone swaps with the character
 
     # ================================================================ markers / activities
     def spawn_markers(self):
@@ -777,33 +778,50 @@ class Game:
         self.phone_screen("home"); self.app.sfx("click", 0.6)
 
     def phone_screen(self, which):
+        """EX IX G9 phone: ANA's blue one with the cracked screen, DANIEL's apple-green one. Anchored bottom-right in
+        aspect2d (scales with window height), so it looks the same at 1024x576, 1280x720 and 1920x1080."""
         if self.phone: self.phone.destroy()
-        acc = self.accent()
-        root = DirectFrame(parent=self.app.a2dBottomRight, frameColor=(0, 0, 0, 0), pos=(-0.42, 0, -0.62))
-        self.phone = root
-        U.panel(root, -0.3, 0.3, -0.56, 0.56, col=(0.02, 0.02, 0.05, 0.97), edge=acc, ew=0.012)
-        U.text(root, "EX IX G9", (0, 0.5), 0.03, fg=(1, 1, 1, 0.6), font=U.FONT_PLAIN)
-        U.text(root, time.strftime("%H:%M"), (0, 0.42), 0.07, fg=(1, 1, 1, 1), font=U.FONT_PLAIN)
-        U.text(root, "Hi, %s" % NAMES[self.active], (0, 0.355), 0.035, fg=acc)
+        acc = self.accent(); who = self.active if self.active in ("ana", "daniel") else "ana"
+        T = lambda n: Filename.from_os_specific(os.path.join(self.app.BASE, "assets", "tex", n)).get_fullpath()
+        PH = 1.22; k = PH / 1170.0; PW = 585 * k                 # phone art is 585x1170 px, screen at (43,43) 479x1054
+        sx0, sy1 = (43 - 292.5) * k, (585 - 43) * k; sw, sh = 479 * k, 1054 * k
+        cx = sx0 + sw / 2; top = sy1
+        root = DirectFrame(parent=self.app.a2dBottomRight, frameColor=(0, 0, 0, 0), pos=(-PW / 2 - 0.06, 0, PH / 2 + 0.04))
+        root.set_bin("gui-popup", 60); self.phone = root; root.which = which
+        img = OnscreenImage(parent=root, image=T("phone_%s.png" % who), scale=(PW / 2, 1, PH / 2)); img.set_transparency(TransparencyAttrib.M_alpha)
+        W = lambda t, y, sc, fg=(1, 1, 1, 1), font=None, wrap=None: U.text(root, t, (cx, top - y), sc, fg=fg, font=font or U.FONT_PLAIN, wrap=wrap)
+        W(time.strftime("%H:%M"), 0.16, 0.085)
+        W("EX IX G9  -  Hi, %s" % NAMES[who], 0.215, 0.03, fg=acc)
         items = []
+        def btn(lbl, fn, y, w=0.2):
+            U.button(root, lbl, (cx, top - y), fn, w=w, h=0.042, scale=0.032, edge=acc); items.append((lbl, fn))
         if which == "home":
-            items = [("CONTACTS", lambda: self.phone_screen("contacts")), ("JP TAXI", lambda: self.phone_screen("taxi")),
-                     ("MAP", lambda: (self.toggle_phone(), self.toggle_map())), ("CLOSE", self.toggle_phone)]
+            for n, (ic, lbl, fn) in enumerate((("phone_icon_contacts.png", "Contacts", lambda: self.phone_screen("contacts")),
+                                              ("phone_icon_taxi.png", "JP TAXI", lambda: self.phone_screen("taxi")))):
+                x = cx + (-0.105 if n == 0 else 0.105)
+                b = DirectButton(parent=root, image=T(ic), image_scale=0.075, relief=None, pos=(x, 0, top - 0.42), command=fn)
+                b.set_transparency(TransparencyAttrib.M_alpha)
+                U.text(root, lbl, (x, top - 0.535), 0.03, font=U.FONT_PLAIN); items.append((lbl, fn))
+            btn("MAP", lambda: (self.toggle_phone(), self.toggle_map()), 0.70)
+            btn("CLOSE", self.toggle_phone, 0.81)
         elif which == "contacts":
-            U.text(root, "CONTACTS", (0, 0.28), 0.04, fg=acc)
-            items = [("Emergency Services", self.call_emergency), ("JP Taxi", lambda: self.phone_screen("taxi")),
-                     ("BACK", lambda: self.phone_screen("home"))]
+            W("CONTACTS", 0.30, 0.045, fg=acc, font=U.FONT)
+            btn("Emergency Services  119", self.call_emergency, 0.42, w=0.23)
+            btn("JP Taxi", lambda: self.phone_screen("taxi"), 0.53, w=0.23)
+            btn("BACK", lambda: self.phone_screen("home"), 0.81)
         elif which == "taxi":
-            U.text(root, "JP TAXI", (0, 0.28), 0.05, fg=(1.0, 0.8, 0.15, 1))
+            W("JP TAXI", 0.30, 0.055, fg=(1.0, 0.8, 0.15, 1), font=U.FONT)
             if self.taxi:
                 st = "Driver arriving" if not self.taxi_ai_arrived() else "Your taxi is here - press F"
-                U.text(root, st, (0, 0.2), 0.03, font=U.FONT_PLAIN, wrap=16)
-                items = [("CANCEL TAXI", self.cancel_taxi), ("BACK", lambda: self.phone_screen("home"))]
+                W(st, 0.40, 0.03, wrap=14)
+                btn("CANCEL TAXI", self.cancel_taxi, 0.55)
             else:
-                U.text(root, "Base fare ¥500 + distance", (0, 0.2), 0.028, font=U.FONT_PLAIN)
-                items = [("REQUEST TAXI", self.request_taxi), ("BACK", lambda: self.phone_screen("home"))]
-        for k, (lbl, fn) in enumerate(items):
-            U.button(root, lbl, (0, 0.12 - k * 0.13), fn, w=0.25, h=0.05, scale=0.036, edge=acc)
+                W("Base fare \u00a5500 + distance", 0.40, 0.028)
+                btn("REQUEST TAXI", self.request_taxi, 0.55)
+            btn("BACK", lambda: self.phone_screen("home"), 0.81)
+        if who == "ana":       # cracked glass drawn over everything, thin and translucent so the app text stays readable
+            cr = OnscreenImage(parent=root, image=T("phone_ana_crack.png"), scale=(PW / 2, 1, PH / 2)); cr.set_transparency(TransparencyAttrib.M_alpha)
+            cr.set_color_scale(1, 1, 1, 0.75); cr.set_bin("gui-popup", 80)
         self.phone.items = items; self.phone.sel = 0
         self.refresh_buttons()
 
