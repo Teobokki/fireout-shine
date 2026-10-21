@@ -1,9 +1,9 @@
 {
-  "version": "1.0.0",
-  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.0",
-  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.0/FIREOUT-SHINE-Setup-1.0.0.exe",
-  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.0/FIREOUT-SHINE-Setup-1.0.0.exe",
-  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.0/FIREOUT-SHINE-1.0.0-Windows-x64.zip",
-  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.0/FIREOUT-SHINE-Portable.exe",
-  "notes": "ファイアアウト・シャイン (FIREOUT SHINE) 1.0.0: first release."
+  "version": "1.0.1",
+  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.1",
+  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.1/FIREOUT-SHINE-Setup-1.0.1.exe",
+  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.1/FIREOUT-SHINE-Setup-1.0.1.exe",
+  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.1/FIREOUT-SHINE-1.0.1-Windows-x64.zip",
+  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.1/FIREOUT-SHINE-Portable.exe",
+  "notes": "指名手配される GET WANTED (the police chase), fixed in-game EX IX G9 phones for ANA and DANIEL, new key art."
 }
