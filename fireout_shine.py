@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -143,7 +143,7 @@ class App(ShowBase):
         # audio
         self._sfx = {}
         for n in ("engine", "engine_low", "siren", "skid", "wind", "rain", "nitro", "crash", "bump", "checkpoint", "beep", "go", "click",
-                  "busted", "win", "heat", "horn", "door", "switch", "dial",
+                  "busted", "win", "heat", "horn", "door", "switch", "dial", "cash",
                   "pistol", "smg", "shotgun", "taser", "swing", "swing_heavy", "hit", "empty"):
             try:
                 self._sfx[n] = self.loader.load_sfx(Filename.from_os_specific(A("sfx", n + ".wav")))
@@ -542,15 +542,59 @@ class App(ShowBase):
         o = self.pause_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.6), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
         U.panel(o, -0.45, 0.45, -0.72, 0.72)
         U.text(o, "PAUSED", (0, 0.58), 0.08, fg=U.PINK); U.text(o, "一時停止", (0, 0.5), 0.04, fg=U.CYAN, font=self.jpfont)
-        items = (("RESUME", self.hide_pause), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
+        items = (("RESUME", self.hide_pause), ("ADD MONEY", self.show_add_money), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
                  ("RESET CAR DAMAGE", lambda: (self.hide_pause(), g.repair_car())),
                  ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls), ("PROFILE", self.show_profile),
                  ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
         for i, (t, c) in enumerate(items):
-            U.button(o, t, (0, 0.45 - i * 0.13), c, w=0.33, h=0.05, scale=0.04)
+            U.button(o, t, (0, 0.43 - i * 0.118), c, w=0.33, h=0.05, scale=0.04, edge=(0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else U.PINK)
         self.accept("escape", self.hide_pause)
 
+    def show_add_money(self):
+        """ADD MONEY panel: type an amount or use the quick buttons; total cash is capped at 100,000,000,000."""
+        from fs_game import CASH_CAP
+        from direct.gui.DirectGui import DirectEntry
+        g = self.game
+        if not g or getattr(self, "money_ui", None): return
+        o = self.money_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.55), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
+        o.set_bin("gui-popup", 70)
+        U.panel(o, -0.78, 0.78, -0.62, 0.62, edge=(0.3, 1.0, 0.45, 1))
+        U.text(o, "ADD MONEY", (0, 0.49), 0.075, fg=(0.3, 1.0, 0.45, 1))
+        bal = U.text(o, "", (0, 0.31), 0.045, fg=U.GOLD, font=U.FONT_PLAIN)
+        U.text(o, "Limit  ¥%s" % format(CASH_CAP, ","), (0, 0.25), 0.03, fg=(0.75, 0.75, 0.8, 1), font=U.FONT_PLAIN)
+        U.text(o, "AMOUNT  ¥", (-0.43, 0.115), 0.04, fg=U.PINK, align=TextNode.A_right)
+        ent = DirectEntry(parent=o, initialText="", width=13, numLines=1, scale=0.06, pos=(-0.4, 0, 0.11), frameColor=(0.1, 0.08, 0.15, 1),
+                          text_fg=(1, 1, 1, 1), entryFont=U.FONT_PLAIN, focus=1, command=lambda t: do_add())
+        msg = U.text(o, "", (0, -0.36), 0.036, fg=(1, 1, 1, 1), font=U.FONT_PLAIN, wrap=34)
+        o.ent = ent; o.msg = msg
+        def upd():
+            bal.setText("Cash  ¥%s" % format(g.cash, ","))
+        def cur():
+            t = ent.get().replace(",", "").replace(" ", "").replace("¥", "").strip()
+            return int(t) if t.isdigit() else 0
+        def quick(v):
+            room = CASH_CAP - g.cash
+            n = room if v is None else min(cur() + v, max(room, 0))
+            ent.enterText(format(n, ",") if n > 0 else ""); msg.setText("")
+        def do_add():
+            ok, text = g.add_cash_text(ent.get())
+            msg.setText(text); msg["fg"] = (0.3, 1.0, 0.45, 1) if ok else (1.0, 0.45, 0.4, 1)
+            if ok: ent.enterText("")
+            upd()
+        o.do_add = do_add; o.quick = quick
+        for k, (lbl, v) in enumerate((("+1K", 1000), ("+100K", 100000), ("+1M", 10 ** 6), ("+1B", 10 ** 9), ("+10B", 10 ** 10), ("MAX", None))):
+            U.button(o, lbl, (-0.55 + k * 0.22, -0.06), lambda v=v: quick(v), w=0.09, h=0.045, scale=0.034, edge=U.GOLD if v is None else U.CYAN)
+        U.button(o, "CLEAR", (-0.25, -0.2), lambda: (ent.enterText(""), msg.setText("")), w=0.14, h=0.05, scale=0.036)
+        U.button(o, "ADD", (0.25, -0.2), do_add, w=0.14, h=0.05, scale=0.04, edge=(0.3, 1.0, 0.45, 1), hint="Enter")
+        def close():
+            self.money_ui.destroy(); self.money_ui = None; self.accept("escape", self.hide_pause)
+        U.button(o, "BACK", (0, -0.52), close, w=0.2, h=0.045, scale=0.04, hint="Esc")
+        self.accept("escape", close); o.close = close
+        upd()
+
     def hide_pause(self):
+        if getattr(self, "money_ui", None):
+            self.money_ui.destroy(); self.money_ui = None
         if self.pause_ui:
             self.pause_ui.destroy(); self.pause_ui = None
         if self.game:

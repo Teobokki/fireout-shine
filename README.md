@@ -8,10 +8,12 @@ Neon street racing and police chases through **Shinko Ward**, an original night-
 Get the installer, portable exe or zip from the [latest release](https://github.com/Teobokki/fireout-shine/releases/latest).
 Also installable and auto-updated from **HYPERION DIGITAL EX**.
 
-## Features (v1.0.1)
+## Features (v1.0.2)
 - Open neon city: scramble crossing with giant video screens, sign-covered streets, elevated expressway, the original 新光タワー lattice tower, power lines, lanterns, shopfronts; HIKARI BEACH with boardwalk, pier and palms
 - Day/night cycle (24 real minutes = 24 h): blue daytime sky with drifting cumulus clouds, sun and horizon haze, golden hour, then neon night; lock Day or Night in Settings
 - Slim modern glass skyscrapers with mullions, setbacks and crowns; turquoise shallows at the beach
+- ADD MONEY in the pause menu: type an amount or use +1K / +100K / +1M / +1B / +10B / MAX; total cash is capped at ¥100,000,000,000 (v1.0.2)
+- The EX IX G9 phone sits left of the speedometer and driving buttons while you drive (v1.0.2)
 - Six districts with names in English and Japanese, tinted on the minimap and full map, with a popup when you enter one
 - Play as ANA or DANIEL and switch any time (Q); your partner follows on foot and rides with you
 - Take any car (F): the driver jumps out and runs off. 10 original car designs

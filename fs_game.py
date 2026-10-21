@@ -20,11 +20,23 @@ from fs_game_banter import BANTER
 from fs_weapons import Arsenal, SHOP_POS, W as WEAPON
 
 
+CASH_CAP = 100_000_000_000        # total cash can never exceed ¥100,000,000,000
+
+
+def fmt_cash_hud(n):
+    """HUD cash: full thousands-separated up to 9,999,999,999; compact (e.g. ¥100.0B) above that."""
+    n = int(n)
+    if n < 10 ** 10: return "¥" + format(n, ",")
+    return "¥%.1fB" % (n / 1e9) if n < 10 ** 12 else "¥" + format(n, ",")
+
+
 class Game:
     def __init__(self, app, save, start=None):
         self.app = app; self.world = app.world; self.time = 0.0
         sd = save or {}
-        self.cash = int(sd.get("cash", 2500)); self.tokens = set(tuple(t) for t in sd.get("tokens", []))
+        try: self.cash = max(0, min(CASH_CAP, int(sd.get("cash", 2500))))
+        except (TypeError, ValueError): self.cash = 2500
+        self.tokens = set(tuple(t) for t in sd.get("tokens", []))
         self.best = dict(sd.get("best", {})); self.cars_cfg = dict(sd.get("cars", {})); self.cam_cams = dict(sd.get("speedcams", {}))
         self.active = sd.get("active", "ana") if sd.get("active") in ("ana", "daniel") else "ana"
         self.cars = []; self.peds = []; self.police = []; self.paused = False; self.overlay = None; self.phone = None
@@ -445,7 +457,7 @@ class Game:
         if a and a.get("racers"):
             for rc in a["racers"]:
                 rc.racer = False; self.remove_car(rc)
-        if reward: self.cash += reward
+        if reward: self.add_cash(reward)
         self.app.sfx("win" if win else "busted", 0.8)
         self.caption(title, sub + ("   +¥%s" % format(reward, ",") if reward else ""), 4.5)
         self.save()
@@ -786,8 +798,9 @@ class Game:
         PH = 1.22; k = PH / 1170.0; PW = 585 * k                 # phone art is 585x1170 px, screen at (43,43) 479x1054
         sx0, sy1 = (43 - 292.5) * k, (585 - 43) * k; sw, sh = 479 * k, 1054 * k
         cx = sx0 + sw / 2; top = sy1
-        root = DirectFrame(parent=self.app.a2dBottomRight, frameColor=(0, 0, 0, 0), pos=(-PW / 2 - 0.06, 0, PH / 2 + 0.04))
-        root.set_bin("gui-popup", 60); self.phone = root; root.which = which
+        drv = self.pcar is not None       # while driving, sit left of the speedometer + driving buttons so they stay visible
+        root = DirectFrame(parent=self.app.a2dBottomRight, frameColor=(0, 0, 0, 0), pos=((-0.86 if drv else -0.06) - PW / 2, 0, PH / 2 + 0.04))
+        root.set_bin("gui-popup", 60); self.phone = root; root.which = which; root.driving = drv
         img = OnscreenImage(parent=root, image=T("phone_%s.png" % who), scale=(PW / 2, 1, PH / 2)); img.set_transparency(TransparencyAttrib.M_alpha)
         W = lambda t, y, sc, fg=(1, 1, 1, 1), font=None, wrap=None: U.text(root, t, (cx, top - y), sc, fg=fg, font=font or U.FONT_PLAIN, wrap=wrap)
         W(time.strftime("%H:%M"), 0.16, 0.085)
@@ -1267,6 +1280,7 @@ class Game:
         # top-left status
         tl = a.a2dTopLeft
         self.cash_t = U.text(tl, "", (0.06, -0.54), 0.05, fg=U.GOLD, align=TextNode.A_left)
+        self.cash_pop = U.text(tl, "", (0.06, -0.54), 0.045, fg=(0.3, 1.0, 0.45, 1), align=TextNode.A_left); self.cash_pop_k = 0.0
         self.stars_t = U.text(tl, "", (0.06, -0.61), 0.06, fg=(1, 0.85, 0.2, 1), align=TextNode.A_left, font=a.jpfont)
         self.race_t = U.text(a.a2dTopCenter, "", (0, -0.1), 0.05, fg=(1, 1, 1, 1))
         self.big = U.text(a.aspect2d, "", (0, 0.15), 0.22, fg=U.PINK)
@@ -1296,6 +1310,8 @@ class Game:
         return (lambda: self.vb.__setitem__(key, True)), (lambda: self.vb.__setitem__(key, False))
 
     def refresh_buttons(self):
+        if self.phone is not None and getattr(self.phone, "driving", None) is not None and self.phone.driving != (self.pcar is not None):
+            self.phone_screen(self.phone.which); return
         st = (self.pcar is not None, self.ride is not None and self.ride.get("mode"), self.phone is not None, self.overlay is not None,
               self.garage is not None or self.home is not None, self.active, self.app.settings.get("buttons", True), bool(self.near_marker()) if hasattr(self, "markers") else False)
         if st == self.btn_state: return
@@ -1328,7 +1344,7 @@ class Game:
                 U.button(br, "SKIP TRIP", (-0.25, 0.4), self.skip_ride, w=0.18, h=0.05, scale=0.034, hint="Enter")
             U.button(br, "GET OUT", (-0.25, 0.27), self.leave_taxi, w=0.18, h=0.05, scale=0.034, hint="Esc")
             return
-        if self.phone:
+        if self.phone and not self.pcar:
             br = DirectFrame(parent=a.a2dBottomLeft, frameColor=(0, 0, 0, 0)); self.btn_nodes.append(br)
             return
         # right-hand action cluster (context sensitive)
@@ -1363,6 +1379,31 @@ class Game:
         for key, lbl, pos, hint in (("v_up", "▲", (0.25, 0.37), "W"), ("v_down", "▼", (0.25, 0.1), "S"),
                                     ("v_left", "◀", (0.11, 0.1), "A"), ("v_right", "▶", (0.39, 0.1), "D")):
             p, r = self.hold(key); U.button(bl, lbl, pos, None, hint=hint, press=p, release=r, **pd)
+
+    def add_cash(self, amount):
+        """Add cash (int), clamped so the total never exceeds CASH_CAP. Returns the amount actually added."""
+        amount = int(amount)
+        if amount <= 0: return 0
+        add = max(0, min(amount, CASH_CAP - self.cash))
+        if add > 0:
+            self.cash += add; self.app.sfx("cash", 0.8)
+            self.cash_pop.setText("+" + fmt_cash_hud(add) if add >= 10 ** 10 else "+¥" + format(add, ",")); self.cash_pop_k = 2.6
+            self.save()
+        return add
+
+    def add_cash_text(self, text):
+        """Validate typed input for the ADD MONEY panel. Returns (ok, message)."""
+        t = (text or "").replace(",", "").replace(" ", "").replace("¥", "").replace("_", "").strip()
+        if not t: return False, "Type an amount first."
+        if t.startswith("-"): return False, "Amount must be more than zero."
+        if not t.isdigit() or not t.isascii(): return False, "Numbers only, please."
+        n = int(t)
+        if n <= 0: return False, "Amount must be more than zero."
+        if self.cash >= CASH_CAP: self.app.sfx("empty", 0.6); return False, "Cash limit reached: %s" % format(CASH_CAP, ",")
+        add = self.add_cash(n)
+        if self.cash >= CASH_CAP:
+            return True, "Added ¥%s.  Cash limit reached: %s" % (format(add, ","), format(CASH_CAP, ","))
+        return True, "Added ¥%s" % format(add, ",")
 
     def toast(self, txt, dur=2.5):
         self.toast_t.setText(txt); self.toast_k = dur
@@ -1446,7 +1487,13 @@ class Game:
         self.nitro_bar[0].show() if c else self.nitro_bar[0].hide()
         if c: self.nitro_bar[1].set_sx(max(0.001, c.nitro_amt))
         me = self.me(); self.hp_bar[1].set_sx(max(0.001, me.health / 100.0))
-        self.cash_t.setText("¥%s" % format(self.cash, ","))
+        self.cash_t.setText(fmt_cash_hud(self.cash))
+        if self.cash_pop_k > 0:      # GTA-style "+¥..." that rises and fades under the cash, cash flashes green
+            self.cash_pop_k -= dt; f = max(0.0, self.cash_pop_k / 2.6)
+            self.cash_pop.set_z(-0.075 + 0.03 * (1 - f)); self.cash_pop["fg"] = (0.3, 1.0, 0.45, min(1.0, f * 2.5))
+            self.cash_t["fg"] = (0.3 + 0.7 * (1 - f), 1.0, 0.45 * f + 0.2 * (1 - f), 1) if f > 0.6 else U.GOLD
+            if self.cash_pop_k <= 0: self.cash_pop.setText(""); self.cash_t["fg"] = U.GOLD
+        self.cash_pop.show() if hud_on else self.cash_pop.hide()
         self.stars_t.setText("★" * self.heat + "☆" * (5 - self.heat) if self.heat else "")
         act = self.activity
         if act and act["kind"] == "race" and act.get("count", 0) <= 0:
@@ -1636,7 +1683,7 @@ class Game:
             t = n.get_python_tag("tok")
             n.set_z(1.6 + math.sin(self.time * 3 + t[0]) * 0.25)
             if math.hypot(t[0] - px, t[1] - py) < 3.0:
-                self.tokens.add(t); n.remove_node(); self.cash += 500; self.app.sfx("checkpoint", 0.6)
+                self.tokens.add(t); n.remove_node(); self.add_cash(500); self.app.sfx("checkpoint", 0.6)
                 self.toast("Neon token %d/%d  +¥500" % (len(self.tokens), len(D.TOKENS)))
         self._cam_cd -= dt
         if self.pcar and self._cam_cd <= 0:
