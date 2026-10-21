@@ -551,7 +551,7 @@ class App(ShowBase):
             m = self.money_ui; m.ent.enterText(t); m.do_add(); L("add", repr(t), "->", m.msg["text"], "cash", self.game.cash)
         steps = [
             (7.0, lambda: (self.show_title(), )), (1.0, self.show_menu), (1.0, lambda: self.start_game(None)),
-            (10.0, lambda: self.game.enter_car(self.game.own)), (1.0, drive), (2.0, lambda: self.game.toggle_phone()),
+            (10.0, lambda: setattr(self.game, "intro_t", 0.01)), (1.0, lambda: self.game.enter_car(self.game.own)), (1.0, drive), (2.0, lambda: (L("phone pcar", self.game.pcar is not None), self.game.toggle_phone(), L("phone open", self.game.phone is not None))),
             (1.5, lambda: shot("phone_driving_v102")), (0.2, lambda: (self.game.vb.clear(), self.game.toggle_phone())),
             (1.5, self.show_pause), (0.6, lambda: shot("pause_menu_v102")), (0.3, self.show_add_money),
             (0.3, lambda: [m_try(t) for t in ("-5", "abc", "0", "", "1,000,000")]),
