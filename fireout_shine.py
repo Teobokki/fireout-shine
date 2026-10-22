@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.5.1"
+APP_VERSION = "1.0.5.2"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -65,7 +65,20 @@ def vtuple(v):
     for p in str(v).strip().lstrip("vV").split("."):
         n = "".join(ch for ch in p if ch.isdigit())
         out.append(int(n) if n else 0)
-    return tuple(out + [0] * (3 - len(out)))
+    return tuple((out + [0] * 4)[:4])          # always 4 parts: 1.0.5 == 1.0.5.0 < 1.0.5.1 < 1.0.5.2
+
+
+def clean_env():
+    """Environment for processes we start (Setup, update helper, relaunch). A PyInstaller onefile parent exports
+    _PYI_* / _MEIPASS2; a relaunched copy that inherits them reuses the old _MEI folder (old code keeps running and
+    Windows shows 'Failed to remove temporary directory'). Strip them and ask the child bootloader to start fresh."""
+    env = {k: v for k, v in os.environ.items() if not (k.upper().startswith("_PYI") or k.upper().startswith("_MEIPASS")
+                                                        or k.upper() in ("TCL_LIBRARY", "TK_LIBRARY"))}
+    mei = getattr(sys, "_MEIPASS", None)
+    if mei and "PATH" in env:
+        env["PATH"] = os.pathsep.join(x for x in env["PATH"].split(os.pathsep) if not os.path.normcase(x).startswith(os.path.normcase(mei)))
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
 
 
 def is_portable():
@@ -970,7 +983,11 @@ class App(ShowBase):
         if r is None: return task.cont
         self._upd_result = None
         if r[0] == "install":
-            try: os.startfile(r[1]); self.userExit()
+            try:
+                import subprocess
+                subprocess.Popen([r[1]], env=clean_env(), cwd=tempfile.gettempdir(), close_fds=True,
+                                 creationflags=0x00000008 | 0x00000200 if os.name == "nt" else 0)   # detached, outside _MEI
+                self.userExit()
             except Exception as e:
                 self._dialog("Could not start the installer:\n%s" % e, [("OPEN DOWNLOAD PAGE", lambda: self._open_browser(RELEASES_URL)), ("CLOSE", self._close_dialog)])
         else:
@@ -1023,7 +1040,7 @@ class App(ShowBase):
                   "if errorlevel 1 (ping -n 2 127.0.0.1 >NUL & set /a T+=1 & if !T! LSS 60 goto swap)",
                   'start "" "%s"' % exe, '(goto) 2>NUL & del "%~f0"']
         with open(bat, "w", encoding="mbcs" if os.name == "nt" else "utf-8") as f: f.write("\r\n".join(lines) + "\r\n")
-        subprocess.Popen(["cmd.exe", "/c", bat], creationflags=0x00000008 | 0x00000200, close_fds=True, cwd=os.path.dirname(exe),
+        subprocess.Popen(["cmd.exe", "/c", bat], creationflags=0x00000008 | 0x00000200, close_fds=True, cwd=os.path.dirname(exe), env=clean_env(),
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _open_browser(self, url):

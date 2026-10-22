@@ -1,4 +1,4 @@
-#define MyVer "1.0.5.1"
+#define MyVer "1.0.5.2"
 [Setup]
 AppId={{7E3A91C4-2B6D-4F18-A5C9-3D8E1F0B6A72}
 AppName=FIREOUT SHINE
@@ -25,7 +25,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-CloseApplications=yes
+CloseApplications=force
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"

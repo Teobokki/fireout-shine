@@ -8,6 +8,11 @@ Neon street racing and police chases through **Shinko Ward**, an original night-
 Get the installer, portable exe or zip from the [latest release](https://github.com/Teobokki/fireout-shine/releases/latest).
 Also installable and auto-updated from **HYPERION DIGITAL EX**.
 
+## 1.0.5.2: update fixes
+- In-game updates now start the Setup detached with a clean environment, and portable copies relaunch fresh. This fixes the "Failed to remove temporary directory (_MEI…)" warning and updates that didn't apply.
+- Versions are compared with all four parts.
+- The Setup closes a running copy before installing. It's still per-user with no admin.
+
 ## Features (v1.0.5)
 - SHINE ONLINE (phone, laptop or pause menu): play together over the internet with a join code such as SHINE-XXXX-XXXX. There's no account and no server: it uses public STUN, a UPnP port-mapping request, UDP hole punching, a REPLY CODE for strict routers and an optional password. Every packet is signed (HMAC-SHA256). Friends on the same Wi-Fi can also find sessions over the LAN. Host, join, chat, kick, leave and ping are all built in (v1.0.5)
 - Friends play as their own NEW characters: 8 presets (KAITO, RIN, JUNO, OBI, SORA, LENA, TAKU, MAYA) plus a customiser for name, skin, hair style and colour, top, colours and accessory (v1.0.5)
