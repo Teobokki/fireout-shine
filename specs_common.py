@@ -12,5 +12,5 @@ ASSETS += [(f, 'assets/models') for f in glob.glob('assets/models/*.bam')]
 ASSETS += [(f, 'assets/models') for f in glob.glob('assets/models/*.json')]   # v1.0.3: SELMOTES face patches
 HIDDEN = ['panda3d.core', 'panda3d.direct', 'direct.showbase.ShowBase', 'direct.gui.DirectGui', 'direct.filter.CommonFilters',
           'fs_game', 'fs_game_banter', 'fs_world', 'fs_geom', 'fs_vehicle', 'fs_people', 'fs_ai', 'fs_ui', 'fs_data', 'fs_lines',
-          'fs_shaders', 'fs_menu_stage', 'fs_weapons', 'fs_miyo', 'fs_vinebuild', 'fs_blocks', 'fs_food', 'fs_laptop', 'fs_browser', 'fs_misto', 'fs_signals', 'fs_citybuild', 'numpy']
+          'fs_shaders', 'fs_menu_stage', 'fs_weapons', 'fs_miyo', 'fs_vinebuild', 'fs_blocks', 'fs_food', 'fs_laptop', 'fs_browser', 'fs_misto', 'fs_signals', 'fs_citybuild', 'fs_net', 'fs_avatar', 'fs_online', 'fs_sfc', 'numpy']
 EXCL = ['matplotlib', 'scipy', 'pandas', 'IPython', 'pytest', 'tkinter', 'PIL', 'cv2', 'wx', 'PyQt5', 'imageio_ffmpeg']   # v1.0.4: numpy is bundled again (BUILD meshes + block palette)

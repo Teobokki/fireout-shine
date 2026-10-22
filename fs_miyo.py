@@ -368,7 +368,7 @@ class Miyo:
             self.bar = game.bar = BeachBar(game)
         except Exception as e: self.bar = game.bar = None; game.app.log_error(e)
 
-    def is_miyo(self): return self.g.active == ABILITY_CHAR       # v1.0.4.1: ANA has BUILD + TSUNAMI
+    def is_miyo(self): return self.g.active == ABILITY_CHAR and not getattr(self.g, "guest", False)       # v1.0.4.1: ANA has BUILD + TSUNAMI
 
     # ---------------------------------------------------------------- BUILD
     def open_build(self):

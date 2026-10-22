@@ -157,7 +157,7 @@ class World:
     def surface(self, x, y):
         if x > D.SEA_X and not self.on_pier(x, y):
             return "water"
-        if D.SAND[0] < x <= D.SEA_X and not self.in_lot(x, y) and not self.on_pier(x, y):
+        if D.SAND[0] < x <= D.SEA_X and not self.in_lot(x, y) and not self.on_pier(x, y) and not self.in_stadium(x, y):
             return "sand"
         return "road"
 
@@ -176,12 +176,18 @@ class World:
         if self.on_sidewalk(x, y): return 0.15
         if D.BOARDWALK[0] <= x <= D.BOARDWALK[1] and -440 <= y <= 440: return 0.2
         if self.in_lot(x, y): return 0.04
+        if D.STADIUM[0] <= x <= D.STADIUM[2] and D.STADIUM[1] <= y <= D.STADIUM[3]: return 0.04     # v1.0.5 SFC 27 stadium
         if D.SAND[0] < x <= D.SEA_X + 4:
             z = 0.02 - 0.17 * (x - D.SAND[0]) / (D.SEA_X + 4 - D.SAND[0])
             for x0, y0, x1, y1 in self.dunes:
                 if x0 <= x <= x1 and y0 <= y <= y1: return max(z, 0.05)
             return z
         return 0.0
+
+    @staticmethod
+    def in_stadium(x, y, pad=0.0):
+        r = D.STADIUM
+        return r[0] - pad <= x <= r[2] + pad and r[1] - pad <= y <= r[3] + pad
 
     def on_pier(self, x, y):
         return 560 <= x <= 690 and 140 <= y <= 156
@@ -767,7 +773,8 @@ class World:
             if -316 < y < -276: continue          # ANA & DANIEL'S HOUSE plot
             self.tree(440 + rng.uniform(-6, 6), y + rng.uniform(-4, 4), ch, palm=True)
             if rng.random() < 0.6:
-                self.tree(rng.uniform(490, 580), y + rng.uniform(-8, 8), ch, palm=rng.random() < 0.7, pine=True)
+                tx_, ty_, pl_ = rng.uniform(490, 580), y + rng.uniform(-8, 8), rng.random() < 0.7
+                if not self.in_stadium(tx_, ty_, 4): self.tree(tx_, ty_, ch, palm=pl_, pine=True)
         for k, y in enumerate((-160, -40, 60, 260, 360)):
             x0 = 486; x1 = 506
             g.box(x0, y, 0, x1, y + 14, 4.5, (0.55, 0.42, 0.3, 1))
@@ -783,6 +790,7 @@ class World:
         for k in range(60):
             dx, dy = rng.uniform(482, 590), rng.uniform(-420, 420)
             if r[0] - 4 < dx < r[2] + 4 and r[1] - 4 < dy < r[3] + 4: continue
+            if self.in_stadium(dx, dy, 20): continue
             w_, l_ = rng.uniform(6, 16), rng.uniform(8, 22); c0 = rng.uniform(0.47, 0.6)
             s.quad((dx - w_, dy - l_, 0.05), (dx + w_, dy - l_, 0.05), (dx + w_, dy + l_, 0.05), (dx - w_, dy + l_, 0.05), (c0, c0 * 0.86, c0 * 0.66, 1), n=(0, 0, 1))
             self.dunes.append((dx - w_, dy - l_, dx + w_, dy + l_))
@@ -791,6 +799,7 @@ class World:
             ux, uy = rng.uniform(515, 592), rng.uniform(-420, 420)
             if r[0] - 6 < ux < r[2] + 6 and r[1] - 6 < uy < r[3] + 6: continue
             if 130 < uy < 166: continue
+            if self.in_stadium(ux, uy, 3): continue
             c = rng.choice(cols)
             g.box(ux - 0.05, uy - 0.05, 0, ux + 0.05, uy + 0.05, 2.3, (0.9, 0.9, 0.9, 1))
             g.box(ux - 1.3, uy - 1.3, 2.2, ux + 1.3, uy + 1.3, 2.45, (c[0], c[1], c[2], 1))
@@ -818,9 +827,11 @@ class World:
             if rng.random() < 0.5: self.parking.append((D.BEACH_ROAD_X + 5.5, y + 0.0, 0.0 if rng.random() < 0.5 else 180.0))
         # beach ped loop along the boardwalk
         self.ped_loops.append([(472, -400), (476, -400), (476, 400), (472, 400)])
-        self.ped_loops.append([(520, -200), (560, -200), (560, 200), (520, 200)])
+        self.ped_loops.append([(520, -200), (560, -200), (560, 160), (520, 160)])
         self.ped_loops.append([(512, -400), (596, -400), (596, -250), (512, -250)])
-        self.ped_loops.append([(512, 200), (596, 200), (596, 400), (512, 400)])
+        self.ped_loops.append([(512, 304), (596, 304), (596, 400), (512, 400)])
+        # v1.0.5: SHINE SFC 27 STADIUM (pitch, stands, goals, gate) - fs_sfc builds it into the beach chunk
+        import fs_sfc; fs_sfc.build_stadium(self)
 
     def build_bounds(self):
         W = D.WORLD
@@ -1129,6 +1140,8 @@ class World:
                         o = img.get_xel(X, Y); img.set_xel(X, Y, o[0] * (1 - a) + c[0] * a, o[1] * (1 - a) + c[1] * a, o[2] * (1 - a) + c[2] * a)
         rect(D.SEA_X, -600, 720, 600, (0.03, 0.10, 0.20))
         rect(D.SAND[0], -440, D.SEA_X, 440, (0.30, 0.26, 0.18))
+        rect(D.STADIUM[0], D.STADIUM[1], D.STADIUM[2], D.STADIUM[3], (0.55, 0.57, 0.62))          # v1.0.5 SFC 27 stadium
+        rect(520, 178, 588, 287, (0.18, 0.48, 0.16))
         rect(411, -440, 452, 440, (0.06, 0.12, 0.07))
         for i in range(D.N_BLOCKS):
             for j in range(D.N_BLOCKS):

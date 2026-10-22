@@ -71,6 +71,12 @@ class Game:
         self.time_scale = 1.0; self.tod = 14.5
         self.markers = []; self.spawn_markers(); self.build_pois(); self.build_hud(); self.bind_keys()
         self.arsenal = Arsenal(self, sd); self.btn_state = None
+        # v1.0.5 SHINE ONLINE + SHINE SFC 27
+        self.match = None; self.guest = False; self._save = sd
+        import fs_online, fs_sfc
+        self.online = fs_online.Online(self); self.online_app = self.online.open
+        try: fs_sfc.add_signs(self)
+        except Exception as e: self.app.log_error(e)
         app.task_mgr.add(self.update, "game-update", sort=10)
         self.letterbox(True); self.intro_t = 5.0
         self.caption("%s & %s" % (NAMES["ana"], NAMES["daniel"]), "%s  -  %s" % (D.TITLE_JP, D.DISTRICT_EN), 4.5)
@@ -153,7 +159,7 @@ class Game:
         px, py = self.player_pos(); w = self.world
         keep = {self.own, self.pcar, self.taxi, self.medic}
         for c in list(self.cars):
-            if c in keep or c in self.police or getattr(c, "racer", False): continue
+            if c in keep or c in self.police or getattr(c, "racer", False) or getattr(c, "friend", False): continue
             if math.hypot(c.x - px, c.y - py) > 175: self.remove_car(c)
         for p in list(self.peds):
             if math.hypot(p.x - px, p.y - py) > 140: p.destroy(); self.peds.remove(p)
@@ -202,7 +208,43 @@ class Game:
         for k, f in zip(self.KEYS, (self.key_f, self.key_e, self.key_c, self.key_r, self.key_h, self.toggle_map, self.toggle_phone,
                                     self.key_esc, self.switch_char, self.switch_char, self.key_up, self.key_enter, self.repair_car, self.key_space,
                                     lambda: self.key_num(0), lambda: self.key_num(1), lambda: self.key_num(2), self.key_b, self.key_n, self.key_l)):
-            a.accept(k, f)
+            a.accept(k, self._key_guard(k, f))
+
+    def _key_guard(self, k, f):
+        def h():
+            m = getattr(self, "match", None)
+            if m is not None and m.key(k): return
+            if m is not None and k != "escape": return
+            if k == "escape" and self.online.ui is not None and self.overlay is self.online.ui:
+                v = self.online.view
+                if v in ("main",): self.online.close()
+                else: self.online.goto("main")
+                return
+            f()
+        return h
+
+    def start_match(self, **kw):
+        """v1.0.5 SHINE SFC 27: kick off at the stadium (VS AI, or ONLINE when the session has friends)"""
+        import fs_sfc
+        if self.match is not None: return
+        if self.ride: self.leave_taxi()
+        if self.pcar: self.exit_car(force=True)
+        if self.home: self.leave_home()
+        if hasattr(self, "arsenal"): self.arsenal.unequip()
+        self.close_overlay()
+        self.match = fs_sfc.Match(self, **kw); self.btn_state = None; self.refresh_buttons()
+
+    def start_match_view(self, setup):
+        import fs_sfc
+        if self.match is not None: return
+        if self.ride: self.leave_taxi()
+        if self.pcar: self.exit_car(force=True)
+        if self.home: self.leave_home()
+        self.close_overlay()
+        try:
+            self.match = fs_sfc.Match(self, mode="view", setup=setup, online=self.online); self.btn_state = None; self.refresh_buttons()
+        except Exception as e:
+            self.app.log_error(e); self.match = None
 
     def unbind(self):
         for k in self.KEYS: self.app.ignore(k)
@@ -281,6 +323,7 @@ class Game:
         """the BUILD text box has focus: letter keys type, they don't honk / switch camera / repair"""
         if getattr(self, "laptop", None) is not None and self.laptop.ui is not None: return True
         if self.overlay is not None and getattr(self.overlay, "is_misto", False): return True
+        if self.overlay is not None and getattr(self.overlay, "is_online", False): return True
         if self.camapp and self.camapp.get("misto"): return True
         m = getattr(self, "miyo", None)
         return m is not None and m.ui is not None and self.overlay is m.ui and hasattr(m.ui, "ent")
@@ -380,12 +423,16 @@ class Game:
 
     def switch_char(self):
         if self.camapp: return
+        if getattr(self, "guest", False):
+            if not self.blocked(): self.toast("You're a guest in a SHINE ONLINE session - leave it to play as ANA or DANIEL")
+            return
         if hasattr(self, "arsenal"): self.arsenal.unequip()
         at_home = self.home is not None and self.home.get("mode") == "room"
         if (self.blocked() and not at_home) or self.ride: return
         self.select_char(CREW[(CREW.index(self.active) + 1) % len(CREW)], _checked=True)
 
     def select_char(self, who, _checked=False):
+        if getattr(self, "guest", False): return
         """v1.0.4.1 crew of two (ANA + DANIEL). Switching to the follower swaps who leads; switching to the benched one brings them in
         exactly where the current character stands (that character steps out and waits off-screen)."""
         if not _checked:
@@ -424,6 +471,7 @@ class Game:
         add("garage", D.GARAGE_POS[0], D.GARAGE_POS[1], "FRGARAGE", (0.2, 1.0, 0.9), "garage")
         add("shop", SHOP_POS[0], SHOP_POS[1], "KAZAN SUPPLY", (1.0, 0.85, 0.2), "shop")
         add("home", D.HOME_POS[0], D.HOME_POS[1], "ANA & DANIEL'S HOUSE", (1.0, 0.55, 0.85), "home")
+        add("sfc", D.STADIUM_GATE[0], D.STADIUM_GATE[1], "SHINE SFC 27", (0.3, 1.0, 0.45), "football")
         self.mk_np = self.app.render.attach_new_node("markers")
         tex = self.world.T("glow.png", repeat=False); beam = self.world.T("beam.png", repeat=False)
         for m in self.markers:
@@ -456,10 +504,10 @@ class Game:
         self.tok_np.set_attrib(ColorBlendAttrib.make(ColorBlendAttrib.M_add, ColorBlendAttrib.O_incoming_alpha, ColorBlendAttrib.O_one))
 
     ICON = {"race": "R", "tt": "T", "chase": "P", "drift": "D", "garage": "G", "shop": "$", "home": "H",
-            "hospital": "+", "tower": "A", "beach": "~", "speedcam": "S"}
+            "hospital": "+", "tower": "A", "beach": "~", "speedcam": "S", "football": "F"}
     LEGEND = [("H", "ANA & DANIEL'S HOUSE (home)"), ("G", "FRGARAGE (paint & plates)"), ("R", "Street race"), ("T", "Time trial"),
               ("D", "Drift zone"), ("P", D.GET_WANTED + " (police chase)"), ("S", "Speed camera"), ("$", "KAZAN SUPPLY (ammo)"), ("+", "Hospital"),
-              ("A", "Shinko Tower (landmark)"), ("~", "HIKARI BEACH"), ("*", "Neon token"), ("X", "Waypoint")]
+              ("A", "Shinko Tower (landmark)"), ("~", "HIKARI BEACH"), ("F", "SHINE SFC 27 STADIUM (football)"), ("*", "Neon token"), ("X", "Waypoint")]
 
     def build_pois(self):
         """non-interactive places shown on the map + minimap"""
@@ -498,6 +546,7 @@ class Game:
         if aid == "garage": self.open_garage(); return
         if aid == "shop": self.arsenal.refill(); return
         if aid == "home": self.enter_home(); return
+        if aid == "sfc": self.online.open("football"); return
         if aid == "chase":
             sx, sy, sh = D.CHASE_MISSION["start"]; self.ensure_in_car(sx, sy, sh)
             self.activity = {"kind": "chase", "t": 0.0, "name": D.GET_WANTED}
@@ -1299,9 +1348,11 @@ class Game:
         if self.waypoint: dests.append(("MAP WAYPOINT", self.waypoint))
         dests.append(("HOME  ANA & DANIEL'S HOUSE", (D.HOME_POS[0] + 8, D.HOME_POS[1] - 8)))
         dests.append(("FRGARAGE", (D.GARAGE_POS[0], D.GARAGE_POS[1] + 6)))
+        dests.append(("SHINE ONLINE SFC 27 FOOTBALL PITCH", (D.BEACH_ROAD_X + 4.0, D.STADIUM_GATE[1])))
         for did, nm, jp, col in D.DISTRICTS:
             dests.append(("%s  %s" % (nm, jp), {"crossing": (0, 0), "akari": (-250, 250), "kurogane": (-250, -250),
                                                 "tower": (250, 250), "sakura": (250, -250), "beach": (460, 0)}[did]))
+        self.taxi_dests = [d[0] for d in dests]
         self.overlay = DirectFrame(parent=self.app.aspect2d, frameColor=(0, 0, 0, 0), pos=(-0.78, 0, 0.08))     # left: the driver stays in view
         U.panel(self.overlay, -0.6, 0.6, -0.78, 0.62, edge=(1.0, 0.8, 0.15, 1))
         U.text(self.overlay, "JP TAXI  -  WHERE TO?", (0, 0.52), 0.06, fg=(1.0, 0.8, 0.15, 1))
@@ -1314,7 +1365,7 @@ class Game:
     def taxi_go(self, p, name):
         self.close_overlay(); c = self.ride["car"]
         d = math.hypot(p[0] - c.x, p[1] - c.y)
-        fare = int(500 + 2.5 * d); self.ride.update(mode="riding", dest=p, fare=fare, t=0.0)
+        fare = int(500 + 2.5 * d); self.ride.update(mode="riding", dest=p, fare=fare, t=0.0, dest_name=name)
         c.ai = ResponderAI(self, c, p, fast=False); c.ai.arrived = False; c.ai.mul = 1.4      # v1.0.4: a bit too fast...
         self.ride["bump_t"] = random.uniform(5.0, 11.0)
         self.toast("Heading to %s - fare ¥%s  (ENTER to skip trip,  C: first person / rear view)" % (name.split("  ")[0], format(fare, ",")), 3.5)
@@ -1456,6 +1507,13 @@ class Game:
         x1, y1 = c.door_pos(-1)
         px, py, nx, ny, tag = self.world.grid.push_circle(x1, y1, 0.4)
         self.me().unseat(x1 + px, y1 + py, c.h + 90); self.buddy().unseat(x1 + px + 1.0, y1 + py + 0.5, c.h + 90)
+        if "SFC 27" in str(r.get("dest_name", "")) and r.get("mode") == "riding" and c.ai is not None and getattr(c.ai, "arrived", False):
+            gx, gy = D.STADIUM_GATE                   # v1.0.5: dropped right at the stadium entrance
+            me = self.me(); me.x, me.y, me.h = gx - 1.5, gy, -90.0; me.sync()
+            b = self.buddy(); b.x, b.y, b.h = gx - 2.5, gy + 1.2, -90.0; b.sync(); self.fade(0.6)
+            self.toast("SHINE SFC 27 STADIUM  -  press [E] at the gate to play", 3.5)
+            c.ai = TrafficAI(self, c, self.world.nearest_node(c.x, c.y)); c.role = "traffic"
+            self.cam_yaw = -90.0; self.cam_pos = None; self.app.sfx("door", 0.6); self.refresh_buttons(); return
         c.ai = TrafficAI(self, c, self.world.nearest_node(c.x, c.y)); c.role = "traffic"
         self.cam_yaw = c.h; self.cam_pos = None; self.app.sfx("door", 0.6); self.refresh_buttons()
 
@@ -1842,6 +1900,8 @@ class Game:
 
     def close_overlay(self):
         if self.overlay:
+            if hasattr(self, "online") and self.overlay is self.online.ui:
+                self.online.ui = None; self.online._drop_preview()
             self.overlay.destroy(); self.overlay = None
         if getattr(self, "map_np", None): self.map_np = None
         self.refresh_buttons()
@@ -1957,7 +2017,7 @@ class Game:
             self.phone_screen(self.phone.which); return
         st = (self.pcar is not None, self.ride is not None and self.ride.get("mode"), self.phone is not None, self.overlay is not None,
               self.garage is not None or self.home is not None or self.camapp is not None, self.active, self.app.settings.get("buttons", True), bool(self.near_marker()) if hasattr(self, "markers") else False,
-              self.miyo.state() if hasattr(self, "miyo") else None, self.miyo_spot() if hasattr(self, "miyo") else None)
+              self.miyo.state() if hasattr(self, "miyo") else None, self.miyo_spot() if hasattr(self, "miyo") else None, getattr(self, "match", None) is not None)
         if st == self.btn_state: return
         self.btn_state = st
         for n in getattr(self, "btn_nodes", []): n.destroy()
@@ -1965,7 +2025,7 @@ class Game:
         if self.btn_root: self.btn_root.destroy()
         self.vb.clear()
         a = self.app; root = self.btn_root = DirectFrame(parent=a.aspect2d, frameColor=(0, 0, 0, 0))
-        if not a.settings.get("buttons", True) or self.garage or self.home or self.camapp: return
+        if not a.settings.get("buttons", True) or self.garage or self.home or self.camapp or getattr(self, "match", None) is not None: return
         tl = DirectFrame(parent=a.a2dTopLeft, frameColor=(0, 0, 0, 0)); self.btn_nodes.append(tl)
         self.btn_tl = tl; root.tl = tl
         sm = dict(w=0.105, h=0.04, scale=0.03)
@@ -2176,7 +2236,7 @@ class Game:
             self.race_t.setText("")
         m = self.near_marker()
         if self.garage or self.overlay or self.phone: self.prompt.setText("")
-        elif m: self.prompt.setText("[E] %s" % ("ENTER FRGARAGE" if m["kind"] == "garage" else "ENTER HOME" if m["kind"] == "home" else ("REFILL AMMO (¥300)" if m["kind"] == "shop" else "START " + m["name"])))
+        elif m: self.prompt.setText("[E] %s" % ("ENTER FRGARAGE" if m["kind"] == "garage" else "ENTER HOME" if m["kind"] == "home" else ("REFILL AMMO (¥300)" if m["kind"] == "shop" else ("PLAY SHINE SFC 27" if m["kind"] == "football" else "START " + m["name"]))))
         elif self.miyo_spot(): self.prompt.setText("[N] SUMMON TSUNAMI")
         elif getattr(self, "bar", None) is not None and self.bar.near(): self.prompt.setText("[E] ORDER A DRINK  -  HIKARI BEACH BAR")
         elif self.pcar is None and self.ride is None and self.taxi_ai_arrived() and math.hypot(self.taxi.x - me.x, self.taxi.y - me.y) < 8:
@@ -2287,7 +2347,10 @@ class Game:
         # v1.0.3: real-time sub-stepping. Frames slower than 20 fps used to be clamped to a 0.05 s step, so on a busy
         # scene (beach / dense sidewalks) ANA & DANIEL walked in slow motion; now up to 4 sub-steps keep normal speed.
         raw = max(0.0, min(0.2, self.app.clock.get_dt()))
-        if self.paused: return task.cont
+        if self.paused:
+            try: self.online.update(1e-4)          # v1.0.5: the session keeps talking while the menu is open
+            except Exception as e: self.app.log_error(e)
+            return task.cont
         n = max(1, int(math.ceil(raw / 0.05))); dt = raw / n * self.time_scale
         try:
             for _ in range(n): self.step(dt)
@@ -2315,6 +2378,11 @@ class Game:
     def step(self, dt):
         self.time += dt
         self.update_daynight(dt)
+        self.online.update(dt)
+        if self.match is not None:             # v1.0.5 SHINE SFC 27: the match owns the player, ball and camera
+            self.match.step(dt); self.world.update(dt, self.time); self.update_hud(dt); self.app.update_audio(self, dt)
+            self.prompt.setText("")
+            return
         if self.home:
             self.update_home(dt); self.update_camapp(dt); self.update_hud(dt); self.app.update_audio(self, dt)
             if self.eating is not None and self.eating.update(dt): self.eating = None
@@ -2378,11 +2446,25 @@ class Game:
     def save(self):
         d = {"cash": self.cash, "tokens": [list(t) for t in self.tokens], "best": self.best, "cars": self.cars_cfg,
              "speedcams": self.cam_cams, "active": self.active, "mate": self.mate, "outfit": self.outfit, "outfits": dict(self.outfits), "photos": list(getattr(self, "photos", [])), "ledger": [list(x) for x in getattr(self, "ledger", [])][-30:],
-             "owned": getattr(self, "owned", {}), "news": [list(x) for x in getattr(self, "news", [])][-10:], "misto": getattr(self, "misto", {}), "drunk": getattr(self, "drunk", 0.0), "car": self.player_kind, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": [NAMES["ana"], NAMES["daniel"]], "version": self.app.VERSION}
+             "owned": getattr(self, "owned", {}), "news": [list(x) for x in getattr(self, "news", [])][-10:], "misto": getattr(self, "misto", {}), "drunk": getattr(self, "drunk", 0.0), "car": self.player_kind, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": self.real_names(), "online": self.online.save() if hasattr(self, "online") else {}, "version": self.app.VERSION}
+        if getattr(self, "guest", False) and d.get("active") not in CREW: d["active"] = "ana"
         try: self.app.write_save(d)
         except Exception as e: self.app.log_error(e)
 
+    def real_names(self):
+        n = {"ana": NAMES["ana"], "daniel": NAMES["daniel"]}
+        o = getattr(self, "online", None)
+        if o is not None and o.guest and o._real: n[o._real[0]] = o._real[1]
+        return [n["ana"], n["daniel"]]
+
     def destroy(self):
+        if getattr(self, "match", None) is not None:
+            try: self.match.quit()
+            except Exception as e: self.app.log_error(e)
+        if hasattr(self, "online"):
+            try: self.online.destroy()
+            except Exception as e: self.app.log_error(e)
+        if getattr(self, "sfc_signs", None) is not None: self.sfc_signs.remove_node()
         self.app.task_mgr.remove("fs-ds"); self._ds_end()
         self.save()
         self.app.task_mgr.remove("game-update"); self.unbind(); self.arsenal.destroy(); self.miyo.destroy(); self.signals.destroy()

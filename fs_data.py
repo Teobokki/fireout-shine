@@ -37,6 +37,8 @@ PAINTS = [("MIDNIGHT", (0.05, 0.05, 0.07)), ("SAKURA", (0.95, 0.35, 0.62)), ("CY
 # ---------------- world layout
 N_BLOCKS = 8; PITCH = 100.0; ROAD_W = 22.0; SIDEWALK = 4.0
 CITY_MIN = -400.0; CITY_MAX = 400.0
+STADIUM = (505.5, 166.5, 601.5, 298.5)       # v1.0.5 SHINE SFC 27 STADIUM footprint (Hikari Beach)
+STADIUM_GATE = (503.0, 232.5)
 BEACH_ROAD_X = 460.0; BEACH_ROAD_W = 16.0; BOARDWALK = (470.0, 478.0); SAND = (478.0, 602.0); SEA_X = 602.0
 WORLD = (-440.0, -440.0, 690.0, 440.0)      # xmin, ymin, xmax, ymax (drivable bounds)
 DISTRICTS = [  # id, name, jp, tint (minimap), popup colour

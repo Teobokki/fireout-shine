@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.4.1"
+APP_VERSION = "1.0.5"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -188,6 +188,8 @@ class App(ShowBase):
             except Exception as e: log_error("oldsave: %r" % e)
         if os.environ.get("FS_SMOKE") == "v104":           # v1.0.4 release smoke test: taxi voice, laptop, food, ANA BUILD + TSUNAMI
             self.do_method_later(1.0, self._smoke_v104, "fs-smoke")
+        if os.environ.get("FS_SMOKE") == "v105":           # v1.0.5 release smoke test: taxi to SFC 27, SHINE ONLINE host + a joiner, AI friends, match
+            self.do_method_later(1.0, self._smoke_v105, "fs-smoke")
         ts = os.environ.get("FS_TESTSCRIPT")
         if ts and not getattr(sys, "frozen", False):
             self.do_method_later(float(os.environ.get("FS_TESTDELAY", "1")),
@@ -587,6 +589,73 @@ class App(ShowBase):
         self.task_mgr.add(run, "smoke-v104")
         return task.done
 
+    def _smoke_v105(self, task):
+        out = os.environ.get("FS_SMOKE_OUT", os.path.join(BASE, "docs"))
+        log = open(os.path.join(out, "smoke_v105.log"), "a", encoding="utf-8")
+        def L(*a): log.write(" ".join(str(x) for x in a) + "\n"); log.flush()
+        bot = {"s": None}
+        def taxi():
+            g = self.game; me = g.me(); c = g.spawn_car("taxi", me.x - 4, me.y, me.h, role="taxi"); c.driver = "ai"; g.taxi = c
+            from fs_ai import ResponderAI
+            c.ai = ResponderAI(g, c, (me.x, me.y)); c.ai.arrived = True; g.board_taxi(); g.taxi_menu()
+            labels = list(getattr(g, "taxi_dests", []))
+            L("taxi menu has stadium", any("SFC 27 FOOTBALL PITCH" in str(t) for t in labels))
+            g.taxi_go((D.BEACH_ROAD_X + 4.0, D.STADIUM_GATE[1]), "SHINE ONLINE SFC 27 FOOTBALL PITCH"); g.skip_ride()
+        def arrived():
+            g = self.game; me = g.me(); m = g.near_marker()
+            L("after taxi pos", round(me.x, 1), round(me.y, 1), "ride", bool(g.ride), "marker", m and m["id"], "prompt", g.prompt.getText())
+        def app_open():
+            g = self.game; g.toggle_phone(); g.online_app(); L("SHINE ONLINE open", g.online.ui is not None, "view", g.online.view)
+            g.online.goto("custom"); g.online._set(dict(__import__("fs_avatar").preset(3))); g.online._done_custom()
+            L("profile", g.online.profile["name"], g.online.profile["hair"])
+        def friends():
+            g = self.game; g.online.bring_them_in(); L("AI friends", [f.cfg["name"] for f in g.online.ai_friends])
+        def host():
+            g = self.game; g.online.host(""); L("hosting")
+        def joiner():
+            import fs_net as N, fs_avatar as A
+            g = self.game; s = g.online.sess; L("code", s.code, "via", s.via, "port", s.port)
+            j = bot["s"] = N.Session("join", "SMOKEBOT", A.preset(5)); j.join(s.code, None if not s.public else None)
+            def pump(t):
+                if bot["s"] is None: return t.done
+                bot["s"].poll(my_state={"x": 500.0, "y": 230.0, "h": 0, "sp": 0.0, "m": 0}); return t.cont
+            self.task_mgr.add(pump, "smoke-bot")
+        def check_peer():
+            g = self.game; s = g.online.sess; j = bot["s"]
+            L("host peers", [(p["name"], p.get("ping")) for p in s.peers.values()], "bot state", j.state, "bot ping", j.ping_ms, "remotes", list(g.online.remotes))
+        def match():
+            g = self.game; g.online.start_football(False, 0.5, 0, 1); m = g.match
+            L("match", m is not None, "online", m is not None and m.online is not None, "humans", [(f.name, f.human) for f in m.fps if f.human is not None] if m else None)
+        def ft():
+            g = self.game; m = g.match; L("match done", m and m.done, "score", m and m.score, "stats", m and m.stats)
+            if m: m.quit()
+            L("after match", g.match, round(g.me().x, 1), round(g.me().y, 1))
+        def leave():
+            g = self.game; s = g.online.sess
+            if s and s.peers: g.online.kick(list(s.peers)[0])
+            g.online.leave(); j = bot["s"]; bot["s"] = None
+            L("bot after kick", j.state if j else None, j.status if j else None); j and j.close()
+            g.online.send_home(); g.save(); L("saved online", (self.load_save() or {}).get("online"))
+        steps = [
+            (7.0, lambda: (self.show_title(), )), (1.0, self.show_menu), (1.0, lambda: self.start_game(None)),
+            (10.0, lambda: (setattr(self.game, "intro_t", 0.01), L("loaded", APP_VERSION, "active", self.game.active, "crew", sorted(self.game.chars)))),
+            (1.0, taxi), (3.0, lambda: None), (6.0, arrived), (0.5, app_open), (0.5, friends), (2.0, lambda: (self.game.online.close(), host())),
+            (12.0, joiner), (6.0, check_peer), (0.5, match), (34.0, ft), (2.0, leave),
+            (0.5, lambda: (L("SMOKE OK"), self.userExit())),
+        ]
+        st = {"i": 0, "t": 0.0}
+        def run(t):
+            try:
+                if self.world is None and st["i"] > 2: return t.cont
+                st["t"] += globalClock.get_dt()
+                if st["i"] < len(steps) and st["t"] >= steps[st["i"]][0]:
+                    st["t"] = 0.0; f = steps[st["i"]][1]; st["i"] += 1; f()
+            except Exception:
+                import traceback; L("SMOKE ERROR", traceback.format_exc()); st["i"] += 1
+            return t.cont
+        self.task_mgr.add(run, "smoke-v105")
+        return task.done
+
     def _smoke_money(self, task):
         out = os.environ.get("FS_SMOKE_OUT", os.path.join(BASE, "docs"))
         log = open(os.path.join(out, "smoke_money.log"), "a", encoding="utf-8")
@@ -629,15 +698,15 @@ class App(ShowBase):
         if not self.game or self.pause_ui: return
         g = self.game; g.paused = True
         o = self.pause_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.6), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
-        U.panel(o, -0.45, 0.45, -0.80, 0.72)
+        U.panel(o, -0.45, 0.45, -0.85, 0.72)
         U.text(o, "PAUSED", (0, 0.58), 0.08, fg=U.PINK); U.text(o, "一時停止", (0, 0.5), 0.04, fg=U.CYAN, font=self.jpfont)
-        items = (("RESUME", self.hide_pause), ("ADD MONEY", self.show_add_money), ("CLOTHING", self.show_clothing), ("FOOD", self.show_food), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
+        items = (("RESUME", self.hide_pause), ("ADD MONEY", self.show_add_money), ("CLOTHING", self.show_clothing), ("FOOD", self.show_food), ("SHINE ONLINE", lambda: (self.hide_pause(), g.online.open())), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
                  ("RESET CAR DAMAGE", lambda: (self.hide_pause(), g.repair_car())),
                  ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls), ("PROFILE", self.show_profile),
                  ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
         for i, (t, c) in enumerate(items):
-            U.button(o, t, (0, 0.43 - i * 0.12), c, w=0.33, h=0.05, scale=0.04,
-                     edge=(0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if t == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if t == "FOOD" else U.PINK)))
+            U.button(o, t, (0, 0.43 - i * 0.11), c, w=0.33, h=0.046, scale=0.038,
+                     edge=(0.95, 0.35, 0.62, 1) if t == "SHINE ONLINE" else (0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if t == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if t == "FOOD" else U.PINK)))
         self.accept("escape", self.hide_pause)
 
     def show_food(self):
@@ -774,11 +843,12 @@ class App(ShowBase):
                 ("Space", "Handbrake (drift)"), ("Shift", "Nitro  /  run on foot"), ("F", "Enter / exit / take any car, ride a taxi"),
                 ("Q", "Switch ANA / DANIEL"), ("B / N", "ANA: BUILD / TSUNAMI  (N again: STOP TSUNAMI)"), ("Tab (hold) / wheel", "Weapon wheel / cycle weapons"),
                 ("Right / Left mouse", "Aim (over-shoulder) / attack"), ("T  or  Up (on foot)", "Phone (EX IX G9)"), ("E", "Start event / enter FRGARAGE"),
-                ("C", "Camera"), ("R", "Reset car"), ("H", "Horn"), ("M", "Map (click to set a waypoint)"), ("Esc", "Menu"),
+                ("C", "Camera"), ("R", "Reset car"), ("H", "Horn"), ("M", "Map (click to set a waypoint)"), ("Esc", "Menu  (SHINE ONLINE: phone, laptop or menu)"),
+                ("SFC 27 football", "WASD move, Space pass, F shoot, R tackle, Shift sprint"),
                 ("Gamepad", "Triggers drive, left stick steers, A enter/exit, RB handbrake")]
         for k, (a, b) in enumerate(rows):
-            U.text(o, a, (-0.3, 0.58 - k * 0.07), 0.033, fg=U.CYAN, align=TextNode.A_right)
-            U.text(o, b, (-0.25, 0.58 - k * 0.07), 0.032, align=TextNode.A_left, font=U.FONT_PLAIN)
+            U.text(o, a, (-0.3, 0.58 - k * 0.068), 0.032, fg=U.CYAN, align=TextNode.A_right)
+            U.text(o, b, (-0.25, 0.58 - k * 0.068), 0.031, align=TextNode.A_left, font=U.FONT_PLAIN)
         U.button(o, "BACK", (0, -0.72), o.destroy, w=0.2, h=0.045, scale=0.04)
 
     def show_profile(self):
