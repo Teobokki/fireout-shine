@@ -1,9 +1,9 @@
 {
-  "version": "1.0.5",
-  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.5",
-  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5/FIREOUT-SHINE-Setup-1.0.5.exe",
-  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5/FIREOUT-SHINE-Setup-1.0.5.exe",
-  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5/FIREOUT-SHINE-1.0.5-Windows-x64.zip",
-  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5/FIREOUT-SHINE-Portable.exe",
-  "notes": "SHINE ONLINE: play with friends over the internet using a SHINE-XXXX-XXXX join code (STUN, UPnP and hole punching, signed packets, optional password, LAN sessions). Friends play as 8 new characters with a customiser, and BRING THEM IN adds AI friends. New SHINE SFC 27 STADIUM football on Hikari Beach: VS AI or online, with AI fill. JP Taxi now goes to the stadium."
+  "version": "1.0.5.1",
+  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.5.1",
+  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.1/FIREOUT-SHINE-Setup-1.0.5.1.exe",
+  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.1/FIREOUT-SHINE-Setup-1.0.5.1.exe",
+  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.1/FIREOUT-SHINE-1.0.5.1-Windows-x64.zip",
+  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.1/FIREOUT-SHINE-Portable.exe",
+  "notes": "SHINE ONLINE now works without admin rights or firewall rules: connections start outbound (the guest calls the host, the host calls back from the REPLY CODE), with keep-alives. SHINE SFC 27 matches now default to UNLIMITED; end them any time with END MATCH (Esc). Timed 4/8/12/90 min matches are still available. Football kits get proper shorts, socks and boots."
 }
