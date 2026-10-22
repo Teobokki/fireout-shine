@@ -20,6 +20,27 @@ def side(name, ang=-70, dist=2.4):
     for n in (app.aspect2d,): n.hide()
     shot(name)
     for n in (app.aspect2d,): n.show()
+def click_shutter():
+    g = G(); n0 = len(glob.glob(os.path.join(g.pictures_dir(), "*.png")))
+    b = g.camapp["shutter"]; b.commandFunc(None); step(2)
+    n1 = len(glob.glob(os.path.join(g.pictures_dir(), "*.png"))); p = g.camapp.get("last")
+    print("RESULT click shutter: pngs %d -> %d  last=%s exists=%s flash=%s toast=%r" % (n0, n1, p, os.path.exists(p or ""), g.camapp.get("flash_np") is not None, g.toast_t.getText()), flush=True)
+    return p
+FACES = {}
+def expr_shot(who, eid):
+    g = G(); g.cam_set_expr(eid); step(3); p = click_shutter(); FACES[(who, eid)] = p
+def selm_open():
+    g = G(); g.camapp["selm_btn"].commandFunc(None); step(2); print("RESULT picker open", g.camapp.get("picker_np") is not None, flush=True)
+def sheet(who):
+    from PIL import Image, ImageDraw, ImageFont
+    f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 34)
+    ims = [Image.open(FACES[(who, e)]).convert("RGB") for e in ("smile", "neutral", "frown")]
+    w, h = ims[0].size; cw = int(w * 0.42); x0 = (w - cw) // 2
+    W_ = Image.new("RGB", (cw * 3, h)); d = ImageDraw.Draw(W_)
+    for i, (im, t) in enumerate(zip(ims, ("SMILE", "NEUTRAL", "GOOFY FROWN"))):
+        W_.paste(im.crop((x0, 0, x0 + cw, h)), (i * cw, 0)); d.rectangle((i * cw + 10, 10, i * cw + 20 + d.textlength(t, font=f), 56), fill=(0, 0, 0))
+        d.text((i * cw + 15, 14), t, font=f, fill=(255, 210, 60))
+    W_.save(os.path.join(OUT, "selmotes_%s.png" % who)); print("SHOT selmotes_" + who, flush=True)
 def st(): g = G(); print("RESULT camapp", g.camapp and g.camapp["mode"], "blocked", g.blocked(), "pcar", g.pcar is not None, flush=True)
 def into_car():
     g = G(); me = g.me(); c = min(g.cars, key=lambda c: math.hypot(c.x - me.x, c.y - me.y))
@@ -31,12 +52,17 @@ PLAN = [
     (0.1, lambda: [G().step(1 / 30.0) for _ in range(300)]),
     (0.1, place), (0.1, lambda: G().toggle_phone()), (0.1, lambda: step(3)), (0.1, lambda: shot("phone_home_camera")),
     (0.1, lambda: G().open_camera()), (0.1, lambda: step(20)), (0.1, st), (0.1, lambda: shot("phone_camera_viewfinder")),
-    (0.1, lambda: snap("selfie_ana")), (0.1, lambda: side("selfie_pose_ana")), (0.1, lambda: step(4)), (0.1, lambda: shot("phone_camera_flash")), (0.1, lambda: step(30)),
+    (0.1, click_shutter), (0.1, lambda: snap("selfie_ana")), (0.1, lambda: side("selfie_pose_ana")),
+    (0.1, selm_open), (0.1, lambda: shot("selmotes_menu")),
+    (0.1, lambda: expr_shot("ana", "smile")), (0.1, lambda: expr_shot("ana", "neutral")), (0.1, lambda: G().key_num(2)), (0.1, lambda: step(3)), (0.1, lambda: FACES.__setitem__(("ana", "frown"), click_shutter())),
+    (0.1, lambda: sheet("ana")), (0.1, lambda: shot("selmotes_frown_ui")), (0.1, lambda: G().cam_set_expr("neutral")), (0.1, lambda: G().cam_selmotes()), (0.1, lambda: step(3)), (0.1, lambda: step(4)), (0.1, lambda: shot("phone_camera_flash")), (0.1, lambda: step(30)),
     (0.1, lambda: G().key_r()), (0.1, lambda: setattr(G().me(), "h", -95)), (0.1, lambda: step(15)), (0.1, st), (0.1, lambda: shot("phone_camera_rear")), (0.1, lambda: snap("photo_rear")),
     (0.1, lambda: G().key_esc()), (0.1, lambda: step(5)), (0.1, st),
     (0.1, lambda: G().switch_char()), (0.1, lambda: step(30)), (0.1, lambda: place(524, 60, 80)),
     (0.1, lambda: G().toggle_phone()), (0.1, lambda: shot("phone_home_daniel")), (0.1, lambda: G().phone_ok() if False else G().open_camera()), (0.1, lambda: step(20)),
-    (0.1, lambda: shot("phone_camera_viewfinder_daniel")), (0.1, lambda: snap("selfie_daniel")), (0.1, lambda: side("selfie_pose_daniel")), (0.1, lambda: G().key_esc()), (0.1, st),
+    (0.1, lambda: shot("phone_camera_viewfinder_daniel")), (0.1, lambda: snap("selfie_daniel")), (0.1, lambda: side("selfie_pose_daniel")),
+    (0.1, selm_open), (0.1, lambda: expr_shot("daniel", "smile")), (0.1, lambda: expr_shot("daniel", "neutral")), (0.1, lambda: expr_shot("daniel", "frown")), (0.1, lambda: sheet("daniel")),
+    (0.1, lambda: (G().key_esc(), print("RESULT expr after close", G().me().expression, G().me().face_np, flush=True))), (0.1, lambda: G().open_camera()), (0.1, lambda: step(5)), (0.1, lambda: G().key_esc()), (0.1, st),
     (0.1, lambda: G().switch_char()), (0.1, lambda: step(10)),
     (0.1, into_car), (0.1, lambda: G().toggle_phone()), (0.1, lambda: G().open_camera()), (0.1, lambda: step(10)), (0.1, st),
     (0.1, lambda: G().key_r()), (0.1, st), (0.1, lambda: shot("phone_camera_car")), (0.1, lambda: snap()), (0.1, lambda: G().key_esc()), (0.1, st),

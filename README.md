@@ -24,7 +24,7 @@ Also installable and auto-updated from **HYPERION DIGITAL EX**.
 - 指名手配される GET WANTED: police chases with heat stars: break line of sight to escape, or get BUSTED
 - FRGARAGE: paint colours and custom plates (up to 8 characters), saved per car
 - EX IX G9 phone: Emergency Services (ambulance) and JP TAXI with destination picker and skip-trip
-- CAMERA app on the phone: selfies with a pose (ANA or DANIEL), a rear camera, and photos saved to Pictures\FIREOUT SHINE (v1.0.3)
+- CAMERA app on the phone: selfies with a pose (ANA or DANIEL), SELMOTES faces (smile / neutral / goofy frown), a rear camera, and photos saved to Pictures\FIREOUT SHINE (v1.0.3)
 - Weapon wheel (hold Tab): fists, baseball bat, pickaxe, taser, pistol, SMG, shotgun; KAZAN SUPPLY ammo refill. Non-gory: people get knocked down and flee
 - Stable arcade driving model (no flipping, sub-stepped collisions, auto-unstick and R reset)
 - Voiced English + Japanese street chatter (offline TTS) with subtitles; duo banter

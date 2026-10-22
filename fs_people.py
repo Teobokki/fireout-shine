@@ -11,6 +11,7 @@ PED_HAIR = [(1, 1, 1), (0.6, 0.6, 0.6), (2.2, 1.6, 1.1), (3.0, 2.6, 1.8), (1.6, 
 
 OUTFITS = [("default", "DEFAULT", "Tank top, red slacks, sneakers"), ("crop", "CROP TOP", "White fitted crop top, red slacks, sneakers"), ("bikini", "BIKINI", "Coral two-piece swimsuit, flip-flops"),
            ("police", "POLICE", "TOKYO NEON PD uniform: shirt, cap, badge, boots")]
+_faces = {}
 def load(app, who, outfit="default"):
     key = who if outfit == "default" else who + "_" + outfit
     if key not in _models:
@@ -200,6 +201,50 @@ class Person:
         v = self._mix(cur, nxt, max(0.0, (f - 0.78) / 0.22))
         self.set_arms((v[0], v[1]), (v[4], v[5]), (v[2], v[3]), (v[6], v[7]))
         self.model.set_r(math.sin(t * 1.3) * 2.0); self.model.set_p(math.sin(t * 0.9) * 1.5)
+
+    # ---- SELMOTES (v1.0.3): selfie facial expressions. A small patch that hugs the face over the mouth carries the
+    # skin texture re-projected from the model with a new mouth painted in (SMILE / GOOFY FROWN). NEUTRAL = no patch.
+    def set_expression(self, expr="neutral"):
+        old = getattr(self, "face_np", None)
+        if old is not None and not old.is_empty(): old.remove_node()
+        self.face_np = None; self.expression = expr
+        if expr == "neutral" or self.ped: return
+        bam = ("daniel" if self.who == "daniel" else "heroine") + ("" if self.outfit == "default" else "_" + self.outfit)
+        base = self.app.BASE; jp = os.path.join(base, "assets", "models", "face_%s.json" % bam)
+        if not os.path.exists(jp):
+            bam = "daniel" if self.who == "daniel" else "heroine"; jp = os.path.join(base, "assets", "models", "face_%s.json" % bam)
+        if not os.path.exists(jp): return
+        import json
+        from panda3d.core import (GeomVertexFormat, GeomVertexData, GeomVertexWriter, GeomTriangles, Geom, GeomNode, TransparencyAttrib,
+                                  GeomVertexArrayFormat, InternalName, Material)
+        d = _faces.get(jp) or _faces.setdefault(jp, json.load(open(jp)))
+        root = self.model.attach_new_node("face_" + expr)
+        mt = Material("face"); mt.set_base_color((1, 1, 1, 1)); mt.set_roughness(0.6); mt.set_metallic(0.0)   # the skin shader reads p3d_Material
+        af = GeomVertexArrayFormat(); af.add_column(InternalName.get_vertex(), 3, Geom.NT_float32, Geom.C_point)
+        af.add_column(InternalName.get_normal(), 3, Geom.NT_float32, Geom.C_normal)
+        af.add_column(InternalName.get_color(), 4, Geom.NT_float32, Geom.C_color)
+        af.add_column(InternalName.get_texcoord(), 2, Geom.NT_float32, Geom.C_texcoord)
+        af.add_column(InternalName.get_tangent(), 4, Geom.NT_float32, Geom.C_vector)      # the skin shader builds a TBN frame
+        fmt = GeomVertexFormat.register_format(GeomVertexFormat(af))
+        for rn, r in d["regions"].items():
+            tn = "face_%s_%s_%s.png" % (bam, expr, rn)
+            if not os.path.exists(os.path.join(base, "assets", "tex", tn)): continue
+            vd = GeomVertexData("face", fmt, Geom.UH_static)
+            wv, wn, wt, wc, wg = (GeomVertexWriter(vd, c) for c in ("vertex", "normal", "texcoord", "color", "tangent"))
+            for x, y, z, a, b, c, u, v in r["v"]:
+                wv.add_data3(x, y, z); wn.add_data3(a, b, c); wt.add_data2(u, v); wc.add_data4(1, 1, 1, 1); wg.add_data4(0.96, 0.27, 0.0, 1)
+            tr = GeomTriangles(Geom.UH_static); n = r["nx"] + 1
+            for j in range(r["nz"]):
+                for i in range(r["nx"]):
+                    k = j * n + i; tr.add_vertices(k, k + 1, k + n + 1); tr.add_vertices(k, k + n + 1, k + n)
+            g = Geom(vd); g.add_primitive(tr); gn = GeomNode("face_%s_%s" % (expr, rn)); gn.add_geom(g)
+            f = root.attach_new_node(gn)
+            t = tex(self.app, tn); t.set_wrap_u(SamplerState.WM_clamp); t.set_wrap_v(SamplerState.WM_clamp)
+            f.set_texture(t, 1); f.set_material(mt, 1)
+            fs_shaders.apply(f, self.app, gloss=0.22, tex=True, sheen=0.8)
+        root.set_two_sided(True); root.set_transparency(TransparencyAttrib.M_alpha); root.set_depth_offset(2)
+        root.set_bin("transparent", 4); root.set_depth_write(False)
+        self.face_np = root
 
     def stop_scrub(self):
         self.scrub_t = None; self.model.set_r(0); self.model.set_p(0); self.set_arms((0, 3), (0, 3), (-10, 0), (-10, 0))

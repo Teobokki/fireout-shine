@@ -163,12 +163,13 @@ class Game:
             self.peds.append(p)
 
     # ================================================================ input
-    KEYS = ("f", "e", "c", "r", "h", "m", "t", "escape", "q", "f2", "arrow_up", "enter", "j", "space")
+    KEYS = ("f", "e", "c", "r", "h", "m", "t", "escape", "q", "f2", "arrow_up", "enter", "j", "space", "1", "2", "3")
 
     def bind_keys(self):
         a = self.app
         for k, f in zip(self.KEYS, (self.key_f, self.key_e, self.key_c, self.key_r, self.key_h, self.toggle_map, self.toggle_phone,
-                                    self.key_esc, self.switch_char, self.switch_char, self.key_up, self.key_enter, self.repair_car, self.key_space)):
+                                    self.key_esc, self.switch_char, self.switch_char, self.key_up, self.key_enter, self.repair_car, self.key_space,
+                                    lambda: self.key_num(0), lambda: self.key_num(1), lambda: self.key_num(2))):
             a.accept(k, f)
 
     def unbind(self):
@@ -194,6 +195,9 @@ class Game:
 
     def key_up(self):
         if self.pcar is None and self.ride is None and not self.blocked() and self.phone is None: self.toggle_phone()
+
+    def key_num(self, k):
+        if self.camapp and self.camapp.get("picker"): self.cam_set_expr(("smile", "neutral", "frown")[k])
 
     def key_space(self):
         if self.camapp: self.cam_shutter()
@@ -893,7 +897,8 @@ class Game:
         if self.ride or (self.blocked() and not self.home_roam()): return
         if hasattr(self, "arsenal"): self.arsenal.unequip()
         me = self.me()
-        self.camapp = {"mode": "rear" if self.pcar else "selfie", "t": 0.0, "ang": 0.0, "pitch": 0.0, "flash": 0.0}
+        self.camapp = {"mode": "rear" if self.pcar else "selfie", "t": 0.0, "ang": 0.0, "pitch": 0.0, "flash": 0.0, "expr": "neutral"}
+        me.set_expression("neutral")
         if self.home: self.home_prompt_off()
         self.cam_prop(); self.cam_ui(); self.app.sfx("click", 0.6); self.refresh_buttons()
         if self.pcar: self.toast("In a car: REAR camera only - selfies work on foot", 3.0)
@@ -928,13 +933,49 @@ class Game:
         sel = ca["mode"] == "selfie"
         U.text(o, "CAMERA", (0, 0.88), 0.05, fg=acc)
         U.text(o, ("SELFIE" if sel else "PHOTO") + "   -   EX IX G9", (0, 0.82), 0.032, font=U.FONT_PLAIN, shadow=(0, 0, 0, 0.8))
-        sh = DirectButton(parent=o, relief=DGG.FLAT, frameSize=(-0.075, 0.075, -0.075, 0.075), frameColor=(1, 1, 1, 0.92), pos=(0, 0, -0.80),
-                          command=self.cam_shutter, text="", rolloverSound=None, clickSound=None)
-        DirectFrame(parent=sh, frameColor=acc, frameSize=(-0.055, 0.055, -0.055, 0.055))
-        U.text(o, "SNAP  [Space / Enter]", (0, -0.93), 0.028, font=U.FONT_PLAIN, shadow=(0, 0, 0, 0.8))
-        U.button(o, "FLIP", (0.42, -0.80), self.cam_flip, w=0.13, h=0.045, scale=0.034, edge=acc, hint="R")
-        U.button(o, "BACK", (-0.42, -0.80), self.close_camera, w=0.13, h=0.045, scale=0.034, hint="Esc")
-        U.text(o, "A / D  angle      W / S  tilt", (0, -0.66), 0.026, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.75), shadow=(0, 0, 0, 0.8))
+        T = lambda n: Filename.from_os_specific(os.path.join(self.app.BASE, "assets", "tex", n)).get_fullpath()
+        # big round camera-style shutter, centred at the bottom; click it or press Space / Enter
+        sh = ca["shutter"] = DirectButton(parent=o, relief=None, pos=(0, 0, -0.74), command=self.cam_shutter,
+                                          image=(T("cam_shutter.png"), T("cam_shutter_down.png"), T("cam_shutter_hover.png"), T("cam_shutter.png")),
+                                          image_scale=0.115, frameSize=(-0.115, 0.115, -0.115, 0.115), rolloverSound=None, clickSound=None)
+        sh.set_transparency(TransparencyAttrib.M_alpha)
+        U.text(o, "TAKE PHOTO", (0, -0.905), 0.045, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9))
+        U.text(o, "Space / Enter", (0, -0.955), 0.026, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.9))
+        U.button(o, "BACK", (-0.78, -0.76), self.close_camera, w=0.13, h=0.05, scale=0.036, hint="Esc")
+        U.button(o, "FLIP", (-0.40, -0.76), self.cam_flip, w=0.13, h=0.05, scale=0.036, edge=acc, hint="R")
+        sm = ca["selm_btn"] = DirectButton(parent=o, relief=None, pos=(0.40, 0, -0.73), command=self.cam_selmotes,
+                                           image=T("cam_selmotes.png"), image_scale=0.06, frameSize=(-0.065, 0.065, -0.065, 0.065),
+                                           rolloverSound=None, clickSound=None)
+        sm.set_transparency(TransparencyAttrib.M_alpha)
+        U.text(o, "SELMOTES", (0.40, -0.83), 0.036, fg=(1.0, 0.85, 0.25, 1), shadow=(0, 0, 0, 0.9))
+        U.text(o, NAMES[self.active] + ": " + {"smile": "SMILE", "neutral": "NEUTRAL", "frown": "GOOFY FROWN"}[ca.get("expr", "neutral")],
+               (0.40, -0.875), 0.024, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.85), shadow=(0, 0, 0, 0.9))
+        U.text(o, "A / D  angle      W / S  tilt", (0, 0.77), 0.026, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.75), shadow=(0, 0, 0, 0.8))
+        if ca.get("picker"): self.cam_selmotes(force=True)
+
+    def cam_selmotes(self, force=False):
+        """SELMOTES picker: three facial expressions for the active character (kept on for the photo)"""
+        ca = self.camapp
+        if not ca: return
+        if ca.get("picker_np"): ca["picker_np"].destroy(); ca["picker_np"] = None
+        if not force:
+            ca["picker"] = not ca.get("picker")
+            self.app.sfx("click", 0.5)
+        if not ca.get("picker"): return
+        pk = ca["picker_np"] = DirectFrame(parent=ca["ui"], frameColor=(0.06, 0.04, 0.12, 0.88), frameSize=(-0.2, 0.2, -0.2, 0.2),
+                                          pos=(0.40, 0, -0.38))
+        U.text(pk, "SELMOTES", (0, 0.145), 0.038, fg=(1.0, 0.85, 0.25, 1))
+        cur = ca.get("expr", "neutral")
+        for k, (eid, nm) in enumerate((("smile", "SMILE"), ("neutral", "NEUTRAL"), ("frown", "GOOFY FROWN"))):
+            U.button(pk, nm, (0, 0.06 - k * 0.095), self.cam_set_expr, w=0.17, h=0.038, scale=0.03, extra=[eid],
+                     edge=(1.0, 0.85, 0.25, 1) if eid == cur else (0.5, 0.5, 0.6, 1), hint=str(k + 1))
+
+    def cam_set_expr(self, eid):
+        ca = self.camapp
+        if not ca: return
+        ca["expr"] = eid; self.me().set_expression(eid); self.app.sfx("click", 0.5)
+        self.toast("%s: %s" % (NAMES[self.active], {"smile": "SMILE", "neutral": "NEUTRAL", "frown": "GOOFY FROWN"}[eid]), 1.5)
+        self.cam_ui()
 
     def cam_flip(self):
         ca = self.camapp
@@ -951,7 +992,7 @@ class Game:
             if ca.get(k): ca[k].remove_node()
         for k in ("ui", "flash_np"):
             if ca.get(k): ca[k].destroy()
-        me = self.me(); me.arm_pose = None; me.set_grip(False, False); me.np.show()
+        me = self.me(); me.arm_pose = None; me.set_grip(False, False); me.np.show(); me.set_expression("neutral")
         self.camapp = None; self.cam_pos = None; self.app.camLens.set_fov(65)
         if self.home: self.home_panel()
         self.app.sfx("click", 0.5); self.refresh_buttons()
@@ -994,7 +1035,7 @@ class Game:
             if ca["mode"] == "selfie": ca["mode"] = "rear"; self.cam_prop(); self.cam_ui()
             c = self.pcar; ca["ang"] = max(-70, min(70, ca["ang"] - s * 60 * dt)); ca["pitch"] = max(-25, min(25, ca["pitch"] + v * 40 * dt))
             r = math.radians(c.h + ca["ang"]); fx, fy = -math.sin(r), math.cos(r)
-            cam.set_pos(c.x + c.fwd[0] * 0.15, c.y + c.fwd[1] * 0.15, c.spec["roof"] - 0.05); cam.set_hpr(c.h + ca["ang"], ca["pitch"], 0)
+            cam.set_pos(c.x + c.fwd[0] * 0.2, c.y + c.fwd[1] * 0.2, c.spec["roof"] + 0.1); cam.set_hpr(c.h + ca["ang"], ca["pitch"], 0)
             lens.set_fov(66); self.cam_h = c.h; return
         fx0, fy0 = -math.sin(math.radians(me.h)), math.cos(math.radians(me.h))
         face = 1.56
