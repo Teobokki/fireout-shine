@@ -9,7 +9,7 @@ import fs_ui as U
 
 LAV = (0.62, 0.48, 1.0, 1); MINT = (0.3, 0.92, 0.82, 1); INK = (0.08, 0.05, 0.16, 0.96)
 LENSES = [("none", "NONE"), ("sparkle", "SPARKLES"), ("cat", "CAT EARS"), ("shades", "SHADES"), ("frame_fs", "FIREOUT FRAME"), ("frame_tokyo", "TOKYO FRAME")]
-CONTACTS = [("ana", "ANA", "アナ"), ("daniel", "DANIEL", "ダニエル"), ("miyo", "MIYOYAZU", "ミヨヤズ"), ("nana", "NANA", "ナナ"), ("kenji", "KENJI", "ケンジ"),
+CONTACTS = [("ana", "ANA", "アナ"), ("daniel", "DANIEL", "ダニエル"), ("nana", "NANA", "ナナ"), ("kenji", "KENJI", "ケンジ"),
             ("honoo", "HONOO RAMEN", "炎ラーメン")]
 REPLIES = [("ramen", "見て！今日のラーメン最高！", "Look! Today's ramen is the best!"), ("beach", "ビーチの夕日、きれいでしょ？", "Beach sunset - pretty, right?"),
            ("neon", "今夜の新光、めっちゃ明るい！", "Shinko is so bright tonight!"), ("site", "現場から一枚！", "One from the building site!"),

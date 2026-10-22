@@ -28,8 +28,8 @@ EMAILS = [("ナナ（カフェ・ルミエール）", "Nana (Café Lumière)", "
            "新しいノートパソコンをお買い上げいただきありがとうございます。", "Thank you for buying your new laptop. Enjoy the browser, MISTO 2 and more."),
           ("炎ラーメン", "HONOO RAMEN", "替え玉無料キャンペーン", "Free extra noodles",
            "今週末は替え玉無料！夜十一時まで営業しています。", "Free extra noodles this weekend! We're open until 11 pm."),
-          ("ミヨヤズ", "MIYOYAZU", "現場より", "From the site",
-           "今日も一日おつかれさま。ビーチに新しい階段を作っておいたよ。", "Good work today. I built some new stairs down on the beach.")]
+          ("ダニエル", "DANIEL", "ビーチで会おう", "See you at the beach",
+           "アナ、ビーチに新しい階段を作ってくれてありがとう！", "Ana, thanks for building those new stairs on the beach!")]
 
 
 class Laptop:
@@ -173,7 +173,7 @@ class Laptop:
     # ------------------------------------------------------------------ apps
     def app_bank(self):
         g = self.g; w = self.window("HIKARI BANK", (0.2, 0.75, 0.5, 1), "光銀行").body
-        self.tx(w, "ようこそ、%s さん" % {"ana": "アナ", "daniel": "ダニエル", "miyo": "ミヨヤズ"}.get(g.active, ""), (-0.9, 0.6), 0.04, jp=True)
+        self.tx(w, "ようこそ、%s さん" % {"ana": "アナ", "daniel": "ダニエル", }.get(g.active, ""), (-0.9, 0.6), 0.04, jp=True)
         from fs_game import NAMES
         self.tx(w, "Welcome, %s" % NAMES[g.active], (-0.9, 0.54), 0.03, fg=(0.3, 0.3, 0.4, 1))
         self.tx(w, "残高  BALANCE", (-0.9, 0.38), 0.035, jp=True)

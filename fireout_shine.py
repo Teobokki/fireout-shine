@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.4.1"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -180,7 +180,13 @@ class App(ShowBase):
         self.show_splash()
         if os.environ.get("FS_SMOKE") == "money":          # built-in release smoke test (works in the frozen exe; runs a fixed sequence only)
             self.do_method_later(1.0, self._smoke_money, "fs-smoke")
-        if os.environ.get("FS_SMOKE") == "v104":           # v1.0.4 release smoke test: taxi voice, laptop, food, MIYOYAZU
+        if os.environ.get("FS_SMOKE_OLDSAVE"):             # v1.0.4.1: simulate a v1.0.4 save where MIYOYAZU was active
+            try:
+                sd = self.load_save() or {}
+                sd.update({"active": "miyo", "mate": "ana", "outfits": {"daniel": "default", "miyo": "default"}})
+                os.makedirs(os.path.dirname(self.save_path()), exist_ok=True); json.dump(sd, open(self.save_path(), "w", encoding="utf-8"))
+            except Exception as e: log_error("oldsave: %r" % e)
+        if os.environ.get("FS_SMOKE") == "v104":           # v1.0.4 release smoke test: taxi voice, laptop, food, ANA BUILD + TSUNAMI
             self.do_method_later(1.0, self._smoke_v104, "fs-smoke")
         ts = os.environ.get("FS_TESTSCRIPT")
         if ts and not getattr(sys, "frozen", False):
@@ -554,12 +560,18 @@ class App(ShowBase):
             g = self.game; g.ride and g.leave_taxi(); r = g.laptop.toggle(); L("laptop opening", g.laptop.phase)
         steps = [
             (7.0, lambda: (self.show_title(), )), (1.0, self.show_menu), (1.0, lambda: self.start_game(None)),
-            (10.0, lambda: setattr(self.game, "intro_t", 0.01)), (1.0, taxi), (3.0, lambda: shot("smoke_taxi_fp")), (0.5, voices),
+            (10.0, lambda: (setattr(self.game, "intro_t", 0.01), L("loaded active", self.game.active, "mate", self.game.mate, "crew", sorted(self.game.chars), "outfits", self.game.outfits))), (1.0, taxi), (3.0, lambda: shot("smoke_taxi_fp")), (0.5, voices),
             (1.0, laptop), (6.0, lambda: (L("laptop ui up", self.game.laptop.ui is not None), shot("smoke_laptop"))), (0.5, lambda: self.game.laptop.close()),
             (0.5, lambda: L("eat", self.game.eat_food("onigiri"))), (6.0, lambda: L("eating done", self.game.eating is None)),
-            (0.5, lambda: (self.game.select_char("miyo"), L("active", self.game.active))), (1.0, lambda: shot("smoke_miyo")),
+            (0.5, lambda: (self.game.switch_char(), L("Q ->", self.game.active, "crew", sorted(self.game.chars)))), (1.0, lambda: (self.game.key_b(), L("daniel B overlay", self.game.overlay is not None))),
+            (0.5, lambda: (self.game.switch_char(), L("Q ->", self.game.active))), (0.5, lambda: shot("smoke_ana")),
             (0.5, lambda: self.game.miyo.start_build("pagoda")), (3.5, lambda: (L("build", [(i["label"], len(i["cols"])) for i in self.game.builds.items]), shot("smoke_build_pagoda"))),
-            (0.5, lambda: (self.game.miyo.clear(), self.game.miyo.start_build("cat"))), (3.5, lambda: (L("build", [(i["label"], len(i["cols"])) for i in self.game.builds.items]), shot("smoke_build_cat"))),
+            (0.5, lambda: self.game.miyo.start_build("horse")), (3.5, lambda: (L("build", [(i["label"], len(i["cols"])) for i in self.game.builds.items]), shot("smoke_build_horse"))),
+            (0.5, lambda: (self.game.miyo.undo(), L("undo ->", len(self.game.builds.items)), self.game.miyo.clear(), L("clear ->", len(self.game.builds.items)))),
+            (0.5, lambda: (self.game.miyo.start_tsunami("big"), L("tsunami", self.game.tsunami is not None and self.game.tsunami.name))),
+            (8.0, lambda: (L("tsunami level", round(self.game.tsunami.level, 2) if self.game.tsunami else None), shot("smoke_tsunami_big"), self.game.miyo.stop_tsunami())),
+            (12.0, lambda: L("after stop tsunami", self.game.tsunami)),
+            (0.5, lambda: (self.game.save(), L("saved active", (self.load_save() or {}).get("active")))),
             (0.5, lambda: (L("SMOKE OK"), self.userExit())),
         ]
         st = {"i": 0, "t": 0.0}
@@ -760,7 +772,7 @@ class App(ShowBase):
         U.text(o, "CONTROLS", (0, 0.68), 0.07, fg=U.PINK)
         rows = [("W / S  or  Arrows", "Accelerate / brake & reverse  (walk on foot)"), ("A / D  or  Arrows", "Steer"),
                 ("Space", "Handbrake (drift)"), ("Shift", "Nitro  /  run on foot"), ("F", "Enter / exit / take any car, ride a taxi"),
-                ("Q", "Switch ANA / DANIEL / MIYOYAZU"), ("B / N", "MIYOYAZU: BUILD / TSUNAMI  (N again: STOP TSUNAMI)"), ("Tab (hold) / wheel", "Weapon wheel / cycle weapons"),
+                ("Q", "Switch ANA / DANIEL"), ("B / N", "ANA: BUILD / TSUNAMI  (N again: STOP TSUNAMI)"), ("Tab (hold) / wheel", "Weapon wheel / cycle weapons"),
                 ("Right / Left mouse", "Aim (over-shoulder) / attack"), ("T  or  Up (on foot)", "Phone (EX IX G9)"), ("E", "Start event / enter FRGARAGE"),
                 ("C", "Camera"), ("R", "Reset car"), ("H", "Horn"), ("M", "Map (click to set a waypoint)"), ("Esc", "Menu"),
                 ("Gamepad", "Triggers drive, left stick steers, A enter/exit, RB handbrake")]
@@ -774,12 +786,12 @@ class App(ShowBase):
         o = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.8), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
         U.panel(o, -0.9, 0.9, -0.7, 0.7)
         U.text(o, "PROFILE", (0, 0.58), 0.07, fg=U.PINK)
-        for k, w in enumerate(("ana", "daniel", "miyo")):
-            x = -0.58 + k * 0.58
+        for k, w in enumerate(("ana", "daniel")):
+            x = -0.32 + k * 0.64
             try: self._img(o, "tex/portrait_%s.png" % w, pos=(x, 0.3), scale=(0.15, 0.15))
             except Exception: pass
-            U.text(o, {"ana": "ANA  アナ", "daniel": "DANIEL", "miyo": "MIYOYAZU"}[w] + ("  (active)" if g.active == w else ""), (x, 0.08), 0.036,
-                   fg={"ana": (0.4, 0.7, 1, 1), "daniel": (0.5, 1, 0.4, 1), "miyo": (1, 0.6, 0.15, 1)}[w], font=self.jpfont)
+            U.text(o, {"ana": "ANA  アナ", "daniel": "DANIEL"}[w] + ("  (active)" if g.active == w else ""), (x, 0.08), 0.036,
+                   fg={"ana": (0.4, 0.7, 1, 1), "daniel": (0.5, 1, 0.4, 1)}[w], font=self.jpfont)
         lines = ["Cash  ¥%s" % format(g.cash, ","), "Neon tokens  %d / %d" % (len(g.tokens), len(D.TOKENS))]
         for k_, v in g.best.items():
             lines.append("Best %s  %s" % (k_.upper(), g.fmt(v) if isinstance(v, float) else v))

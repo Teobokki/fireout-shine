@@ -1,5 +1,5 @@
 """FIREOUT SHINE v1.0.4 - food & drink: per-item 3D props, the animated eat / drink sequence (house EAT SNACK, pause-menu
-FOOD, bar drinks) shared by ANA, DANIEL and MIYOYAZU."""
+FOOD, bar drinks) shared by ANA and DANIEL."""
 import math, random
 from panda3d.core import TextNode
 from fs_miyo import blob_mesh, box_mesh, shade

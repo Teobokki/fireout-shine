@@ -15,8 +15,8 @@ from fs_ai import TrafficAI, RacerAI, PoliceAI, ResponderAI, graph_path, wrap
 PAINTS = [("RED", (0.78, 0.04, 0.06)), ("BLUE", (0.05, 0.18, 0.75)), ("YELLOW", (0.95, 0.78, 0.05)), ("GREEN", (0.05, 0.6, 0.18)),
           ("BLACK", (0.03, 0.03, 0.035)), ("WHITE", (0.9, 0.9, 0.92)), ("ORANGE", (1.0, 0.38, 0.03)), ("PURPLE", (0.42, 0.08, 0.75)),
           ("SAKURA", (0.95, 0.35, 0.62)), ("TEAL", (0.05, 0.62, 0.66))]
-NAMES = {"ana": "ANA", "daniel": "DANIEL", "miyo": "MIYOYAZU"}
-CREW = ("ana", "daniel", "miyo")
+NAMES = {"ana": "ANA", "daniel": "DANIEL"}
+CREW = ("ana", "daniel")            # v1.0.4.1: MIYOYAZU removed; old saves with her active load as ANA
 from fs_game_banter import BANTER
 from fs_weapons import Arsenal, SHOP_POS, W as WEAPON
 from fs_miyo import Miyo
@@ -54,14 +54,12 @@ class Game:
         self.garage = None; self.cp_np = None; self._cam_cd = 0.0; self.lb_on = False; self.lb_k = 0.0
         self.outfit = sd.get("outfit", "default") if sd.get("outfit") in ("default", "crop", "bikini", "police") else "default"
         so = sd.get("outfits") if isinstance(sd.get("outfits"), dict) else {}
-        self.outfits = {"ana": self.outfit, "daniel": so.get("daniel", "default") if isinstance(so.get("daniel"), str) else "default",
-                        "miyo": so.get("miyo", "default") if isinstance(so.get("miyo"), str) else "default"}
+        self.outfits = {"ana": self.outfit, "daniel": so.get("daniel", "default") if isinstance(so.get("daniel"), str) else "default"}
         self.home = None
         self.camapp = None          # v1.0.3: phone CAMERA app state (selfie / rear)
         self.player_kind = sd.get("car", "gts") if sd.get("car") in PLAYER_CARS else "gts"
         x, y, h = D.SPAWN
-        self.chars = {"ana": Person(self, "ana", x - 1.0, y - 4.0, 180), "daniel": Person(self, "daniel", x + 1.0, y - 4.2, 180),
-                      "miyo": Person(self, "miyo", x + 0.0, y - 5.0, 180)}
+        self.chars = {"ana": Person(self, "ana", x - 1.0, y - 4.0, 180), "daniel": Person(self, "daniel", x + 1.0, y - 4.2, 180)}
         for k, p in self.chars.items(): self.bench(p, k not in (self.active, self.mate))     # v1.0.4: two on screen, the third waits off-screen
         self.miyo = Miyo(self)
         from fs_signals import Signals
@@ -388,7 +386,7 @@ class Game:
         self.select_char(CREW[(CREW.index(self.active) + 1) % len(CREW)], _checked=True)
 
     def select_char(self, who, _checked=False):
-        """v1.0.4 crew of three. Switching to the follower swaps who leads; switching to the benched one brings them in
+        """v1.0.4.1 crew of two (ANA + DANIEL). Switching to the follower swaps who leads; switching to the benched one brings them in
         exactly where the current character stands (that character steps out and waits off-screen)."""
         if not _checked:
             if self.camapp or who == self.active: return
@@ -931,7 +929,7 @@ class Game:
 
     # ================================================================ phone (EX IX G9)
     def accent(self):
-        return {"ana": (0.2, 0.55, 1.0, 1), "miyo": (1.0, 0.55, 0.1, 1)}.get(self.active, (0.45, 0.95, 0.3, 1))
+        return {"ana": (0.2, 0.55, 1.0, 1)}.get(self.active, (0.45, 0.95, 0.3, 1))
 
     def toggle_phone(self):
         if self.phone:
@@ -1057,7 +1055,7 @@ class Game:
         hand = getattr(me, "handR", None)
         if hand is None or hand.is_empty(): return
         from fs_geom import MB
-        b = MB("phone_prop"); col = {"ana": (0.12, 0.35, 0.95, 1), "miyo": (1.0, 0.5, 0.08, 1)}.get(me.who, (0.45, 0.85, 0.25, 1))
+        b = MB("phone_prop"); col = {"ana": (0.12, 0.35, 0.95, 1)}.get(me.who, (0.45, 0.85, 0.25, 1))
         b.box(-0.036, -0.005, -0.075, 0.036, 0.005, 0.075, col)
         b.box(-0.032, 0.0052, -0.07, 0.032, 0.0062, 0.07, (0.3, 0.55, 1.2, 1))           # screen (faces the character)
         b.box(0.014, -0.0065, 0.045, 0.028, -0.005, 0.064, (0.05, 0.05, 0.06, 1))         # lens
@@ -1203,7 +1201,7 @@ class Game:
         if ca["mode"] == "selfie":
             ca["ang"] = max(-55, min(55, ca["ang"] + s * 50 * dt)); ca["pitch"] = max(-0.25, min(0.35, ca["pitch"] + v * 0.4 * dt))
             r = math.radians(me.h + 14 + ca["ang"]); fx, fy = -math.sin(r), math.cos(r)
-            d = 0.92 if me.who in ("ana", "miyo") else 1.0; cz = face + 0.16 + ca["pitch"]
+            d = 0.92 if me.who == "ana" else 1.0; cz = face + 0.16 + ca["pitch"]
             cam.set_pos(me.x + fx * d, me.y + fy * d, cz); cam.look_at(me.x + fx0 * 0.05, me.y + fy0 * 0.05, face - 0.12 if not ca.get("misto") else face + 0.02); lens.set_fov(64)
             # pose: right arm out towards the lens holding the phone, left hand waves beside the face
             wv = math.sin(t * 7.0)
@@ -1975,9 +1973,9 @@ class Game:
         U.button(tl, "MAP", (0.36, -0.07), self.toggle_map, hint="M", **sm)
         U.button(tl, "PHONE", (0.59, -0.07), self.toggle_phone, hint="T", edge=self.accent(), **sm)
         U.button(tl, "LAPTOP", (0.82, -0.07), lambda: self.laptop.toggle(), hint="L", edge=(0.35, 0.85, 1.0, 1), **sm)
-        sw = U.button(tl, "", (0.35, -0.28), self.switch_char, w=0.31, h=0.15, scale=0.03, hint="Q", edge=self.accent())
+        sw = U.button(tl, "", (0.25, -0.28), self.switch_char, w=0.21, h=0.15, scale=0.03, hint="Q", edge=self.accent())
         for k, who in enumerate(CREW):
-            x = -0.2 + k * 0.2; on = who == self.active
+            x = -0.1 + k * 0.2; on = who == self.active
             DirectFrame(parent=sw, frameColor=(0.3, 1.0, 1.0, 1) if on else (0.35, 0.35, 0.42, 1),
                         frameSize=(-0.092, 0.092, -0.092, 0.092), pos=(x, 0, 0.025), relief=DGG.FLAT)
             try:
@@ -2016,8 +2014,8 @@ class Game:
             U.button(br, "FIRE", (col2, rows[2]), None, hint="LMB", press=fp, release=fr, edge=(1, 0.4, 0.3, 1), **bw)
             p, r = self.hold("v_aim"); U.button(br, "AIM", (col1, rows[2]), None, hint="RMB", press=p, release=r, **bw)
             U.button(br, "WEAPONS", (col1, rows[3]), lambda: self.arsenal.toggle_wheel(), hint="Tab", edge=U.GOLD, **bw)
-        # v1.0.4: MIYOYAZU's abilities (contextual-button style, with key hints) + STOP TSUNAMI for anyone
-        if self.active == "miyo" and not self.pcar:
+        # v1.0.4.1: ANA's abilities (were MIYOYAZU's) (contextual-button style, with key hints) + STOP TSUNAMI for anyone
+        if self.active == "ana" and not self.pcar:
             U.button(br, "BUILD", (col2, rows[3]), self.key_b, hint="B", edge=(1.0, 0.55, 0.1, 1), **bw)
             if self.tsunami is None:
                 U.button(br, "TSUNAMI", (col2, rows[4]), self.key_n, hint="N", edge=(0.3, 0.75, 1.0, 1), **bw)
@@ -2041,8 +2039,8 @@ class Game:
             p, r = self.hold(key); U.button(bl, lbl, pos, None, hint=hint, press=p, release=r, **pd)
 
     def miyo_spot(self):
-        """contextual prompt: MIYOYAZU standing on HIKARI BEACH can call the TSUNAMI from right there"""
-        if self.active != "miyo" or self.pcar or self.tsunami is not None or self.home or self.garage: return None
+        """contextual prompt: ANA standing on HIKARI BEACH can call the TSUNAMI from right there"""
+        if self.active != "ana" or self.pcar or self.tsunami is not None or self.home or self.garage: return None
         me = self.me()
         if D.SAND[0] - 2 < me.x < D.SEA_X + 2: return ("SUMMON TSUNAMI", self.key_n, "N", (0.3, 0.75, 1.0, 1))
         return None

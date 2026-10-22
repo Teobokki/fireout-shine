@@ -1,4 +1,4 @@
-"""v1.0.4 MIYOYAZU BUILD, city style.
+"""v1.0.4 BUILD (ANA's ability since v1.0.4.1), city style.
 
 Builds are made the same way as the Shinko Ward buildings: real-scale solid meshes (boxes, cylinders, frustums, domes,
 sloped and curved roofs) using the city's own facade textures (windows, glass curtain walls, shopfronts), flat painted

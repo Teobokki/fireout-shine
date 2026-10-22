@@ -1,6 +1,6 @@
-"""v1.0.4 MIYOYAZU abilities: BUILD (type anything -> a city-style building with real walk-on / walk-into collision, undo,
+"""v1.0.4.1 ANA's abilities (were MIYOYAZU's in v1.0.4): BUILD (type anything -> a city-style building with real walk-on / walk-into collision, undo,
 clear all) and TSUNAMI (SMALL / MEDIUM / BIG wave over HIKARI BEACH and Tokyo, STOP TSUNAMI drains it and restores
-everything). Only MIYOYAZU can trigger them; anyone can press STOP TSUNAMI so nobody is ever stuck in the water."""
+everything). Only ANA can trigger them; anyone can press STOP TSUNAMI so nobody is ever stuck in the water."""
 import math, random, re, time
 import numpy as np
 from panda3d.core import (GeomVertexFormat, GeomVertexArrayFormat, GeomVertexData, GeomTriangles, Geom, GeomNode, InternalName,
@@ -12,6 +12,7 @@ import fs_ui as U
 VOX = 0.5                     # one build block = 0.5 m
 STEP = 0.62                   # people can step up this much (so stairs / pyramids are climbable)
 ORANGE = (1.0, 0.55, 0.1, 1)
+ABILITY_CHAR = "ana"            # v1.0.4.1: MIYOYAZU was removed; ANA has BUILD and TSUNAMI
 _FMT = None
 
 
@@ -114,7 +115,7 @@ class Builds:
         m, label = self.make(text)
         if not m.solids: return None
         lx0, ly0, lx1, ly1 = m.bounds()
-        # face the build's front (-y) toward MIYOYAZU, snapped to 90 deg so collision stays an axis-aligned column grid
+        # face the build's front (-y) toward the builder, snapped to 90 deg so collision stays an axis-aligned column grid
         q = int(round(me.h / 90.0)) % 4; h = q * 90.0
         fx, fy = -math.sin(math.radians(h)), math.cos(math.radians(h))
         dist = -ly0 + 2.5
@@ -145,7 +146,7 @@ class Builds:
         npth.reparent_to(getattr(w, "static", None) or self.root)
         npth.set_pos(cx, cy, 0.0); npth.set_h(h)
         w.fac_nodes = list(getattr(w, "fac_nodes", [])) + facs
-        # the structure rises out of the ground while MIYOYAZU builds it
+        # the structure rises out of the ground while ANA builds it
         npth.set_sz(0.02)
         bbox = (wx0 - 0.5, wy0 - 0.5, wx1 + 0.5, wy1 + 0.5)
         it = dict(np=npth, cols=colinfo, bbox=bbox, label=label, text=text, rise=0.0, n=len(m.solids), center=(cx, cy), facs=facs)
@@ -356,7 +357,7 @@ class Tsunami:
 
 
 class Miyo:
-    """MIYOYAZU's ability controller (owned by the Game)."""
+    """ANA's BUILD / TSUNAMI ability controller (owned by the Game)."""
     def __init__(self, game):
         self.g = game; self.builds = Builds(game); self.tsu = None; self.ui = None; self.anim = 0.0; self.pending = None
         game.builds = self.builds
@@ -367,18 +368,18 @@ class Miyo:
             self.bar = game.bar = BeachBar(game)
         except Exception as e: self.bar = game.bar = None; game.app.log_error(e)
 
-    def is_miyo(self): return self.g.active == "miyo"
+    def is_miyo(self): return self.g.active == ABILITY_CHAR       # v1.0.4.1: ANA has BUILD + TSUNAMI
 
     # ---------------------------------------------------------------- BUILD
     def open_build(self):
         g = self.g
-        if not self.is_miyo(): g.toast("Only MIYOYAZU can BUILD  -  press Q to switch to her"); return
+        if not self.is_miyo(): g.toast("Only ANA can BUILD  -  press Q to switch to her"); return
         if g.pcar or g.blocked() or g.phone: return
         if hasattr(g, "arsenal"): g.arsenal.unequip()
         a = g.app; o = g.overlay = DirectFrame(parent=a.aspect2d, frameColor=(0, 0, 0, 0.45), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
         U.panel(o, -0.95, 0.95, -0.55, 0.55, edge=ORANGE)
-        U.text(o, "MIYOYAZU  -  BUILD", (0, 0.43), 0.068, fg=ORANGE)
-        U.text(o, "Type anything: house, tower, bridge, stairs, pyramid, castle, ship, pagoda, giant cat statue...", (0, 0.335), 0.03,
+        U.text(o, "ANA  -  BUILD", (0, 0.43), 0.068, fg=ORANGE)
+        U.text(o, "Type anything: house, pagoda, skyscraper, tower, bridge, stairs, castle, horse, cat, car, rocket...", (0, 0.335), 0.03,
                fg=(0.85, 0.85, 0.9, 1), font=U.FONT_PLAIN)
         ent = DirectEntry(parent=o, initialText=getattr(self, "last_text", ""), width=24, numLines=1, scale=0.06, pos=(-0.72, 0, 0.19),
                           frameColor=(0.1, 0.08, 0.15, 1), text_fg=(1, 1, 1, 1), entryFont=U.FONT_PLAIN, focus=1, command=lambda t: go())
@@ -405,7 +406,7 @@ class Miyo:
         it = self.builds.place(text, me)
         if it is None: g.toast("Nothing to build for \"%s\"" % text); return
         self.anim = 1.7; me.set_grip(True, False)
-        g.toast("MIYOYAZU builds: %s" % it["label"], 3.5); g.app.sfx("swing_heavy", 0.7)
+        g.toast("ANA builds: %s" % it["label"], 3.5); g.app.sfx("swing_heavy", 0.7)
         cx, cy = it["center"]; g.cam_yaw = math.degrees(math.atan2(-(cx - me.x), (cy - me.y))); g.cam_pos = None
 
     def undo(self):
@@ -423,7 +424,7 @@ class Miyo:
 
     def open_tsunami(self):
         g = self.g
-        if not self.is_miyo(): g.toast("Only MIYOYAZU can summon a TSUNAMI  -  press Q to switch to her"); return
+        if not self.is_miyo(): g.toast("Only ANA can summon a TSUNAMI  -  press Q to switch to her"); return
         if g.blocked() or g.phone or g.activity: return
         a = g.app; o = g.overlay = DirectFrame(parent=a.aspect2d, frameColor=(0, 0, 0, 0.45), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
         U.panel(o, -0.85, 0.85, -0.55, 0.55, edge=(0.3, 0.75, 1.0, 1))
@@ -452,7 +453,7 @@ class Miyo:
         if hasattr(g, "news"): g.news.append(("tsunami", sev, time.time()))
         px, py = g.player_pos(); near = [p for p in g.peds if math.hypot(p.x - px, p.y - py) < 30]
         if near: g.npc_say("tsunami", random.choice(near))
-        g.toast("MIYOYAZU summons a %s TSUNAMI!" % self.tsu.name, 3.0); g.refresh_buttons()
+        g.toast("ANA summons a %s TSUNAMI!" % self.tsu.name, 3.0); g.refresh_buttons()
 
     def stop_tsunami(self):
         if self.tsu is not None: self.tsu.stop(); self.g.refresh_buttons()

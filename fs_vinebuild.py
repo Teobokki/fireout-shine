@@ -1,4 +1,4 @@
-"""MIYOYAZU BUILD generator (reused from the EX Inc. dream-vine builder) - text -> voxel Canvas, fully offline.
+"""BUILD generator (reused from the EX Inc. dream-vine builder) - text -> voxel Canvas, fully offline.
 (c)2026 EX Inc./HYPERION DIGITAL (c)2026 - all code original.
 
 How it works (fully offline, no network, no API key):

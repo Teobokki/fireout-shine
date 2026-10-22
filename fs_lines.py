@@ -107,7 +107,6 @@ LINES_JA2 = [   # (district, japanese, english) - natural, casual Japanese trans
     ("*", "インフルエンサーやってます。影響してるのは主にハトだけど。", "I'm an influencer. I influence pigeons, mostly."),
     ("*", "あれってアナさん？ニュースより速く走るって聞いたよ。", "Is that Ana? I heard she drives faster than the news."),
     ("*", "渋滞ってひどいよね。でも好き。クラクションが鳴るパレードみたい。", "Traffic is terrible. I love it. It's like a parade that honks."),
-    ("*", "あ、ミヨヤズさんだ！ヘルメット、似合ってるね。", "Oh, it's Miyoyazu! The hard hat suits you."),
     ("*", "ダニエルさん、そのシャツ派手だね。いい意味で。", "Daniel, that shirt is loud. In a good way."),
     ("*", "すみません、駅はどっちですか？あ、大丈夫です。地図ありました。", "Excuse me, which way is the station? Oh, never mind. I have a map."),
     ("crossing", "友達とここで待ち合わせ。みんな同じこと考えてるけど。", "I'm meeting a friend here. So is everyone else."),

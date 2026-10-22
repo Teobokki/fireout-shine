@@ -25,3 +25,4 @@
 Downloads: FIREOUT-SHINE-Setup-1.0.4.exe (installer), FIREOUT-SHINE-Portable.exe, FIREOUT-SHINE-1.0.4-Windows-x64.zip
 
 ©2026 EX Inc./HYPERION DIGITAL ©2026
+- Update: in v1.0.4.1, MIYOYAZU was removed and ANA has BUILD and TSUNAMI instead.

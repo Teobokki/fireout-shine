@@ -1,4 +1,4 @@
-"""On-foot characters: ANA, DANIEL & MIYOYAZU (playable crew) and pedestrians (same v2 skin texture set, varied outfits)."""
+"""On-foot characters: ANA & DANIEL (playable crew) and pedestrians (same v2 skin texture set, varied outfits)."""
 import math, os, random
 from panda3d.core import NodePath, Filename, TextNode, SamplerState
 import fs_shaders
@@ -13,8 +13,7 @@ OUTFITS = [("default", "DEFAULT", "Tank top, red slacks, sneakers"), ("crop", "C
            ("police", "POLICE", "TOKYO NEON PD uniform: shirt, cap, badge, boots")]
 # v1.0.4: one outfit table per playable character - used by the house WARDROBE and the pause-menu CLOTHING switcher
 CREW_OUTFITS = {"ana": OUTFITS,
-                "daniel": [("default", "DEFAULT", "Floral shirt, navy trousers, sneakers"), ("swim", "SWIM SHORTS", "Blue swim shorts, bare feet")],
-                "miyo": [("default", "CONSTRUCTION", "Hi-vis vest, hard hat, cargo work trousers, work boots")]}
+                "daniel": [("default", "DEFAULT", "Floral shirt, navy trousers, sneakers"), ("swim", "SWIM SHORTS", "Blue swim shorts, bare feet")]}
 
 
 def outfits_for(app_base, who):
@@ -27,7 +26,8 @@ def outfits_for(app_base, who):
 
 
 _faces = {}
-BAM = {"daniel": "daniel", "miyo": "miyoyazu"}
+BAM = {"daniel": "daniel"}
+HAND_TINT = (1.031, 0.959, 0.893, 1)    # v1.0.4.1: ANA's hands match her warmer, more realistic skin (tools_skin_realism.py)
 def load(app, who, outfit="default"):
     key = who if outfit == "default" else who + "_" + outfit
     if key not in _models:
@@ -83,7 +83,7 @@ class Person:
 
     def build_model(self):
         app = self.app; who = self.who; ped = self.ped
-        base = who if who in ("daniel", "miyo") else "ana"
+        base = who if who == "daniel" else "ana"
         m = load(app, base, self.outfit); m.reparent_to(self.np); m.set_h(180); self.model = m
         suf = "_" + base if base != "ana" and os.path.exists(os.path.join(app.BASE, "assets", "tex", "skin_c_%s.png" % base)) else ""
         if self.outfit != "default" and os.path.exists(os.path.join(app.BASE, "assets", "tex", "skin_c_%s.png" % self.outfit)):
@@ -106,7 +106,7 @@ class Person:
             for gn in ar.find_all_matches("**/+GeomNode"):
                 if "sleeve" in str(gn): continue        # shirt sleeves keep the cloth material
                 if "fingers" in str(gn) or "fist" in str(gn):   # hands: skin-tone material (no baked UVs), same skin shading
-                    fs_shaders.apply(gn, app, gloss=0.22, sheen=0.8); continue
+                    fs_shaders.apply(gn, app, gloss=0.22, sheen=0.8, tint=HAND_TINT if base == "ana" else (1, 1, 1, 1)); continue
                 gn.set_texture(tex(app, "skin_c%s.png" % suf), 1)
                 fs_shaders.apply(gn, app, gloss=0.22, tex=True, nmap=tex(app, "skin_n%s.png" % suf), sheen=0.8)
         self.arm_pose = None        # (pitchR, pitchL) override from the weapon code; None = natural swing
@@ -127,11 +127,6 @@ class Person:
                 lg.set_texture(tex(app, "skin_c%s.png" % suf), 1)
                 fs_shaders.apply(lg, app, gloss=0.22, tex=True, nmap=tex(app, "skin_n%s.png" % suf), sheen=0.8)
                 for ff in lg.find_all_matches("**/ff*"): fs_shaders.apply(ff, app, gloss=0.2, sheen=0.3)
-        if base == "miyo":     # hi-vis: the orange vest and reflective strips pop, the hard hat has a glossy shell
-            for nm, kw in (("vest", dict(gloss=0.25, sheen=0.2, emitboost=0.35)), ("bands", dict(gloss=0.9, sheen=0.0, emitboost=0.8)),
-                           ("hardhat", dict(gloss=0.7, sheen=0.1))):
-                n = m.find("**/" + nm)
-                if not n.is_empty(): fs_shaders.apply(n, app, **kw)
         if self.outfit == "police":
             bd = m.find("**/badge")
             if not bd.is_empty(): fs_shaders.apply(bd, app, gloss=0.9, sheen=0.0, emitboost=1.0)
@@ -342,7 +337,7 @@ class Person:
         # step is a quick smooth step instead of a pop
         gz = self.g.world.ground_z(self.x, self.y) if hasattr(self.g.world, "ground_z") else (0.15 if self.g.world.on_sidewalk(self.x, self.y) else 0.0)
         cur = getattr(self, "_gz", None)
-        # v1.0.4: MIYOYAZU's BUILD structures - walls/towers block, low steps and tops can be walked on
+        # v1.0.4: BUILD structures (ANA's ability since v1.0.4.1) - walls/towers block, low steps and tops can be walked on
         B = getattr(self.g, "builds", None)
         if B is not None and B.items and self.in_car is None:
             self.x, self.y, st = B.resolve(self.x, self.y, cur if cur is not None else gz, 0.33)

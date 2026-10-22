@@ -1,4 +1,4 @@
-#define MyVer "1.0.4"
+#define MyVer "1.0.4.1"
 [Setup]
 AppId={{7E3A91C4-2B6D-4F18-A5C9-3D8E1F0B6A72}
 AppName=FIREOUT SHINE
@@ -7,7 +7,7 @@ AppVerName=FIREOUT SHINE {#MyVer}
 AppPublisher=EX Inc./HYPERION DIGITAL
 AppPublisherURL=https://github.com/Teobokki/fireout-shine
 AppCopyright=©2026 EX Inc./HYPERION DIGITAL ©2026
-VersionInfoVersion={#MyVer}.0
+VersionInfoVersion={#MyVer}
 VersionInfoCompany=EX Inc./HYPERION DIGITAL
 VersionInfoCopyright=©2026 EX Inc./HYPERION DIGITAL ©2026
 VersionInfoProductName=FIREOUT SHINE
