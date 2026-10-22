@@ -47,6 +47,7 @@ class Game:
         self.garage = None; self.cp_np = None; self._cam_cd = 0.0; self.lb_on = False; self.lb_k = 0.0
         self.outfit = sd.get("outfit", "default") if sd.get("outfit") in ("default", "crop", "bikini", "police") else "default"
         self.home = None
+        self.camapp = None          # v1.0.3: phone CAMERA app state (selfie / rear)
         self.player_kind = sd.get("car", "gts") if sd.get("car") in PLAYER_CARS else "gts"
         x, y, h = D.SPAWN
         self.chars = {"ana": Person(self, "ana", x - 1.0, y - 4.0, 180), "daniel": Person(self, "daniel", x + 1.0, y - 4.2, 180)}
@@ -162,12 +163,12 @@ class Game:
             self.peds.append(p)
 
     # ================================================================ input
-    KEYS = ("f", "e", "c", "r", "h", "m", "t", "escape", "q", "f2", "arrow_up", "enter", "j")
+    KEYS = ("f", "e", "c", "r", "h", "m", "t", "escape", "q", "f2", "arrow_up", "enter", "j", "space")
 
     def bind_keys(self):
         a = self.app
         for k, f in zip(self.KEYS, (self.key_f, self.key_e, self.key_c, self.key_r, self.key_h, self.toggle_map, self.toggle_phone,
-                                    self.key_esc, self.switch_char, self.switch_char, self.key_up, self.key_enter, self.repair_car)):
+                                    self.key_esc, self.switch_char, self.switch_char, self.key_up, self.key_enter, self.repair_car, self.key_space)):
             a.accept(k, f)
 
     def unbind(self):
@@ -189,13 +190,18 @@ class Game:
         return False
 
     def blocked(self):
-        return self.paused or self.overlay is not None or self.intro_t > 0 or self.garage is not None or self.home is not None
+        return self.paused or self.overlay is not None or self.intro_t > 0 or self.garage is not None or self.home is not None or self.camapp is not None
 
     def key_up(self):
         if self.pcar is None and self.ride is None and not self.blocked() and self.phone is None: self.toggle_phone()
 
+    def key_space(self):
+        if self.camapp: self.cam_shutter()
+
     def key_enter(self):
+        if self.camapp: self.cam_shutter(); return
         if self.home and self.home.get("mode") == "wardrobe": self.close_wardrobe(True); return
+        if self.home_roam(): self.home_use(); return
         if self.ride and self.ride.get("mode") == "riding": self.skip_ride()
 
     def repair_car(self):
@@ -229,6 +235,7 @@ class Game:
                 if math.hypot(p.x - self.pcar.x, p.y - self.pcar.y) < 15: p.flee = 2.0; p.flee_from = (self.pcar.x, self.pcar.y)
 
     def key_esc(self):
+        if self.camapp: self.close_camera(); return
         if self.phone: self.toggle_phone(); return
         if self.home:
             if self.home.get("mode") == "shower": self.end_shower()
@@ -243,6 +250,7 @@ class Game:
         self.app.show_pause()
 
     def key_r(self):
+        if self.camapp: self.cam_flip(); return
         c = self.pcar
         if c is None: return
         x, y, h = self.world.nearest_road_point(c.x, c.y)
@@ -265,9 +273,10 @@ class Game:
         if best: self.enter_car(best[1])
 
     def key_e(self):
+        if self.camapp: return
         if self.home and self.home.get("mode") == "shower": self.end_shower(); return
         if self.home:
-            if self.home.get("mode") == "room": self.open_wardrobe()
+            if self.home.get("mode") == "room": self.home_use()
             return
         if self.blocked(): return
         m = self.near_marker()
@@ -302,6 +311,7 @@ class Game:
         self.app.sfx("door", 0.6); self.refresh_buttons()
 
     def switch_char(self):
+        if self.camapp: return
         if hasattr(self, "arsenal"): self.arsenal.unequip()
         at_home = self.home is not None and self.home.get("mode") == "room"
         if (self.blocked() and not at_home) or self.ride: return
@@ -696,7 +706,8 @@ class Game:
             mw = self.app.mouseWatcherNode
             if mw is not None and mw.has_mouse(): self.cam_yaw -= mw.get_mouse_x() * 90 * dt
             me.h = self.cam_yaw; s = 0
-        if (f or s) and not self.blocked() and self.phone is None:
+        roam = self.home_roam(); blk = (self.blocked() and not roam) or self.camapp is not None
+        if (f or s) and not blk and self.phone is None:
             yaw = math.radians(self.cam_yaw)
             fx, fy = -math.sin(yaw), math.cos(yaw); rx, ry = fy, -fx
             dx, dy = fx * f + rx * s, fy * f + ry * s; L = math.hypot(dx, dy) or 1; dx /= L; dy /= L
@@ -706,6 +717,11 @@ class Game:
             if not self.arsenal.aiming: me.h += wrap(th - me.h) * min(1, dt * 10)
             if f > 0 and not s: self.cam_yaw += wrap(me.h - self.cam_yaw) * min(1, dt * 1.2)
             elif s and not f: self.cam_yaw += wrap(me.h - self.cam_yaw) * min(1, dt * 0.6)
+        if roam:                                   # v1.0.3: free roam inside the house - walls + furniture collide
+            for _ in range(2):
+                px, py, nx, ny, tag = self.world.home_grid.push_circle(me.x, me.y, 0.32); me.x += px; me.y += py
+            b = self.world.home_bounds; me.x = max(b[0], min(b[2], me.x)); me.y = max(b[1], min(b[3], me.y))
+            me.walk_anim(dt, sp); me.sync(); return
         px, py, nx, ny, tag = self.world.grid.push_circle(me.x, me.y, 0.35); me.x += px; me.y += py
         for c in self.cars_near(me.x, me.y, 5):
             for cx, cy, r, _ in c.circles():
@@ -719,6 +735,10 @@ class Game:
     def follow(self, bud, me, dt):
         if bud.update_knock(dt): bud.sync(); return
         r = math.radians(me.h); tx = me.x + math.cos(r) * 1.5 + math.sin(r) * 1.2; ty = me.y + math.sin(r) * 1.5 - math.cos(r) * 1.2
+        if self.camapp:                            # camera app: step behind (photobomb the selfie, out of the rear camera's view)
+            tx = me.x + math.cos(r) * 0.9 + math.sin(r) * 1.5; ty = me.y + math.sin(r) * 0.9 - math.cos(r) * 1.5
+        elif self.home:                            # indoors: walk beside, slightly ahead, so they don't block the camera
+            tx = me.x + math.cos(r) * 1.2 - math.sin(r) * 0.5; ty = me.y + math.sin(r) * 1.2 + math.cos(r) * 0.5
         dx, dy = tx - bud.x, ty - bud.y; d = math.hypot(dx, dy)
         if d > 25:
             bud.x, bud.y = tx, ty; d = 0
@@ -728,10 +748,15 @@ class Game:
             th = math.degrees(math.atan2(-dx, dy)); bud.h += wrap(th - bud.h) * min(1, dt * 8)
         else:
             bud.h += wrap(me.h - bud.h) * min(1, dt * 3)
-        px, py, nx, ny, tag = self.world.grid.push_circle(bud.x, bud.y, 0.35); bud.x += px; bud.y += py
+        if self.home:
+            for _ in range(2):
+                px, py, nx, ny, tag = self.world.home_grid.push_circle(bud.x, bud.y, 0.32); bud.x += px; bud.y += py
+            b = self.world.home_bounds; bud.x = max(b[0], min(b[2], bud.x)); bud.y = max(b[1], min(b[3], bud.y))
+        else:
+            px, py, nx, ny, tag = self.world.grid.push_circle(bud.x, bud.y, 0.35); bud.x += px; bud.y += py
         dme = math.hypot(bud.x - me.x, bud.y - me.y)
         if 1e-3 < dme < 0.75: bud.x += (bud.x - me.x) / dme * (0.75 - dme); bud.y += (bud.y - me.y) / dme * (0.75 - dme)
-        bud.x = min(bud.x, D.SEA_X - 0.5) if not self.world.on_pier(bud.x, bud.y) else bud.x
+        if not self.home: bud.x = min(bud.x, D.SEA_X - 0.5) if not self.world.on_pier(bud.x, bud.y) else bud.x
         bud.walk_anim(dt, sp); bud.sync()
 
     # ================================================================ chatter / subtitles
@@ -786,7 +811,7 @@ class Game:
     def toggle_phone(self):
         if self.phone:
             self.phone.destroy(); self.phone = None; self.app.sfx("click", 0.5); self.refresh_buttons(); return
-        if self.blocked() or self.ride: return
+        if (self.blocked() and not self.home_roam()) or self.ride: return
         self.phone_screen("home"); self.app.sfx("click", 0.6)
 
     def phone_screen(self, which):
@@ -810,11 +835,12 @@ class Game:
             U.button(root, lbl, (cx, top - y), fn, w=w, h=0.042, scale=0.032, edge=acc); items.append((lbl, fn))
         if which == "home":
             for n, (ic, lbl, fn) in enumerate((("phone_icon_contacts.png", "Contacts", lambda: self.phone_screen("contacts")),
-                                              ("phone_icon_taxi.png", "JP TAXI", lambda: self.phone_screen("taxi")))):
-                x = cx + (-0.105 if n == 0 else 0.105)
-                b = DirectButton(parent=root, image=T(ic), image_scale=0.075, relief=None, pos=(x, 0, top - 0.42), command=fn)
+                                              ("phone_icon_taxi.png", "JP TAXI", lambda: self.phone_screen("taxi")),
+                                              ("phone_icon_camera.png", "CAMERA", self.open_camera))):
+                x = cx + (n - 1) * 0.15
+                b = DirectButton(parent=root, image=T(ic), image_scale=0.062, relief=None, pos=(x, 0, top - 0.42), command=fn)
                 b.set_transparency(TransparencyAttrib.M_alpha)
-                U.text(root, lbl, (x, top - 0.535), 0.03, font=U.FONT_PLAIN); items.append((lbl, fn))
+                U.text(root, lbl, (x, top - 0.52), 0.027, font=U.FONT_PLAIN); items.append((lbl, fn))
             btn("MAP", lambda: (self.toggle_phone(), self.toggle_map()), 0.70)
             btn("CLOSE", self.toggle_phone, 0.81)
         elif which == "contacts":
@@ -837,6 +863,158 @@ class Game:
             cr.set_color_scale(1, 1, 1, 0.95); cr.set_bin("gui-popup", 80)
         self.phone.items = items; self.phone.sel = 0
         self.refresh_buttons()
+
+    # ================================================================ CAMERA app (v1.0.3): selfie + rear camera, saves PNGs
+    def pictures_dir(self):
+        """%USERPROFILE%\\Pictures\\FIREOUT SHINE (or ~/Pictures/FIREOUT SHINE); falls back to the save folder"""
+        cands = []
+        if os.name == "nt":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                class GUID(ctypes.Structure):
+                    _fields_ = [("a", wintypes.DWORD), ("b", wintypes.WORD), ("c", wintypes.WORD), ("d", ctypes.c_ubyte * 8)]
+                g = GUID(0x33E28130, 0x4E1E, 0x4676, (ctypes.c_ubyte * 8)(0x83, 0x5A, 0x98, 0x39, 0x5C, 0x3B, 0xC3, 0xBB))  # FOLDERID_Pictures
+                pp = ctypes.c_wchar_p()
+                if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(g), 0, None, ctypes.byref(pp)) == 0:
+                    cands.append(pp.value); ctypes.windll.ole32.CoTaskMemFree(pp)
+            except Exception: pass
+            if os.environ.get("USERPROFILE"): cands.append(os.path.join(os.environ["USERPROFILE"], "Pictures"))
+        cands.append(os.path.join(os.path.expanduser("~"), "Pictures"))
+        for c in cands:
+            try:
+                d = os.path.join(c, "FIREOUT SHINE"); os.makedirs(d, exist_ok=True)
+                if os.access(d, os.W_OK): return d
+            except Exception: continue
+        d = os.path.join(os.path.dirname(self.app.save_path()), "Pictures"); os.makedirs(d, exist_ok=True); return d
+
+    def open_camera(self):
+        if self.phone: self.phone.destroy(); self.phone = None
+        if self.ride or (self.blocked() and not self.home_roam()): return
+        if hasattr(self, "arsenal"): self.arsenal.unequip()
+        me = self.me()
+        self.camapp = {"mode": "rear" if self.pcar else "selfie", "t": 0.0, "ang": 0.0, "pitch": 0.0, "flash": 0.0}
+        if self.home: self.home_prompt_off()
+        self.cam_prop(); self.cam_ui(); self.app.sfx("click", 0.6); self.refresh_buttons()
+        if self.pcar: self.toast("In a car: REAR camera only - selfies work on foot", 3.0)
+
+    def cam_prop(self):
+        """the EX IX G9 in ANA / DANIEL's right hand (selfie)"""
+        ca = self.camapp; me = self.me()
+        if ca.get("prop"): ca["prop"].remove_node(); ca["prop"] = None
+        if ca["mode"] != "selfie" or me.in_car is not None: return
+        hand = getattr(me, "handR", None)
+        if hand is None or hand.is_empty(): return
+        from fs_geom import MB
+        b = MB("phone_prop"); col = (0.12, 0.35, 0.95, 1) if me.who == "ana" else (0.45, 0.85, 0.25, 1)
+        b.box(-0.036, -0.005, -0.075, 0.036, 0.005, 0.075, col)
+        b.box(-0.032, 0.0052, -0.07, 0.032, 0.0062, 0.07, (0.3, 0.55, 1.2, 1))           # screen (faces the character)
+        b.box(0.014, -0.0065, 0.045, 0.028, -0.005, 0.064, (0.05, 0.05, 0.06, 1))         # lens
+        n = b.node(); n.reparent_to(hand); n.set_pos(0, 0, -0.045); ca["prop"] = n
+
+    def cam_ui(self):
+        ca = self.camapp
+        if ca.get("ui"): ca["ui"].destroy()
+        a = self.app; o = ca["ui"] = DirectFrame(parent=a.aspect2d, frameColor=(0, 0, 0, 0)); o.set_bin("gui-popup", 50)
+        acc = self.accent(); ar = a.getAspectRatio()
+        for sx in (-1, 1):                                  # viewfinder corner brackets
+            for sy in (-1, 1):
+                x, y = sx * (ar - 0.12), sy * 0.86
+                DirectFrame(parent=o, frameColor=(1, 1, 1, 0.85), frameSize=(min(0, -sx * 0.14), max(0, -sx * 0.14), -0.004, 0.004), pos=(x, 0, y))
+                DirectFrame(parent=o, frameColor=(1, 1, 1, 0.85), frameSize=(-0.004, 0.004, min(0, -sy * 0.14), max(0, -sy * 0.14)), pos=(x, 0, y))
+        for k in (-1, 1):                                   # faint rule-of-thirds grid
+            DirectFrame(parent=o, frameColor=(1, 1, 1, 0.12), frameSize=(-ar, ar, -0.002, 0.002), pos=(0, 0, k * 0.333))
+            DirectFrame(parent=o, frameColor=(1, 1, 1, 0.12), frameSize=(-0.002, 0.002, -1, 1), pos=(k * ar / 3, 0, 0))
+        sel = ca["mode"] == "selfie"
+        U.text(o, "CAMERA", (0, 0.88), 0.05, fg=acc)
+        U.text(o, ("SELFIE" if sel else "PHOTO") + "   -   EX IX G9", (0, 0.82), 0.032, font=U.FONT_PLAIN, shadow=(0, 0, 0, 0.8))
+        sh = DirectButton(parent=o, relief=DGG.FLAT, frameSize=(-0.075, 0.075, -0.075, 0.075), frameColor=(1, 1, 1, 0.92), pos=(0, 0, -0.80),
+                          command=self.cam_shutter, text="", rolloverSound=None, clickSound=None)
+        DirectFrame(parent=sh, frameColor=acc, frameSize=(-0.055, 0.055, -0.055, 0.055))
+        U.text(o, "SNAP  [Space / Enter]", (0, -0.93), 0.028, font=U.FONT_PLAIN, shadow=(0, 0, 0, 0.8))
+        U.button(o, "FLIP", (0.42, -0.80), self.cam_flip, w=0.13, h=0.045, scale=0.034, edge=acc, hint="R")
+        U.button(o, "BACK", (-0.42, -0.80), self.close_camera, w=0.13, h=0.045, scale=0.034, hint="Esc")
+        U.text(o, "A / D  angle      W / S  tilt", (0, -0.66), 0.026, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.75), shadow=(0, 0, 0, 0.8))
+
+    def cam_flip(self):
+        ca = self.camapp
+        if not ca: return
+        if ca["mode"] == "rear" and self.pcar is not None:
+            self.toast("Selfie mode is off in a car - get out first"); return
+        ca["mode"] = "rear" if ca["mode"] == "selfie" else "selfie"; ca["ang"] = 0.0; ca["pitch"] = 0.0
+        self.cam_prop(); self.cam_ui(); self.app.sfx("click", 0.5)
+
+    def close_camera(self):
+        ca = self.camapp
+        if not ca: return
+        for k in ("prop",):
+            if ca.get(k): ca[k].remove_node()
+        for k in ("ui", "flash_np"):
+            if ca.get(k): ca[k].destroy()
+        me = self.me(); me.arm_pose = None; me.set_grip(False, False); me.np.show()
+        self.camapp = None; self.cam_pos = None; self.app.camLens.set_fov(65)
+        if self.home: self.home_panel()
+        self.app.sfx("click", 0.5); self.refresh_buttons()
+
+    def cam_shutter(self):
+        ca = self.camapp
+        if not ca or ca.get("busy"): return
+        ca["busy"] = True; a = self.app
+        nm = "%s_%s.png" % ("selfie" if ca["mode"] == "selfie" else "photo", time.strftime("%Y%m%d_%H%M%S"))
+        path = None
+        try:
+            d = self.pictures_dir(); path = os.path.join(d, nm)
+            k = 1
+            while os.path.exists(path): path = os.path.join(d, nm[:-4] + "_%d.png" % k); k += 1
+            a.render2d.hide()                               # no HUD / viewfinder in the picture
+            a.graphicsEngine.render_frame(); a.graphicsEngine.render_frame()
+            ok = a.win.save_screenshot(Filename.from_os_specific(path))
+        except Exception as e:
+            ok = False; print("camera save failed", e)
+        finally:
+            a.render2d.show(); ca["busy"] = False
+        if ca.get("flash_np"): ca["flash_np"].destroy()
+        ca["flash_np"] = DirectFrame(parent=a.render2d, frameColor=(1, 1, 1, 1), frameSize=(-1, 1, -1, 1)); ca["flash_np"].set_bin("gui-popup", 90)
+        ca["flash_np"].set_transparency(TransparencyAttrib.M_alpha); ca["flash"] = 0.35
+        ca["last"] = path if ok else None
+        self.app.sfx("click", 0.9)
+        self.toast(("Saved  -  Pictures/FIREOUT SHINE/%s" % os.path.basename(path)) if ok else "Couldn't save the photo", 3.0)
+
+    def update_camapp(self, dt):
+        ca = self.camapp
+        if not ca: return
+        ca["t"] += dt; t = ca["t"]; me = self.me(); cam = self.app.camera; lens = self.app.camLens
+        if ca.get("flash_np"):
+            ca["flash"] -= dt; f = max(0.0, ca["flash"] / 0.35)
+            ca["flash_np"]["frameColor"] = (1, 1, 1, f * 0.9)
+            if f <= 0: ca["flash_np"].destroy(); ca["flash_np"] = None
+        s = (1 if self.down("d", "arrow_right", "v_right") else 0) - (1 if self.down("a", "arrow_left", "v_left") else 0)
+        v = (1 if self.down("w", "arrow_up", "v_up") else 0) - (1 if self.down("s", "arrow_down", "v_down") else 0)
+        if self.pcar is not None:
+            if ca["mode"] == "selfie": ca["mode"] = "rear"; self.cam_prop(); self.cam_ui()
+            c = self.pcar; ca["ang"] = max(-70, min(70, ca["ang"] - s * 60 * dt)); ca["pitch"] = max(-25, min(25, ca["pitch"] + v * 40 * dt))
+            r = math.radians(c.h + ca["ang"]); fx, fy = -math.sin(r), math.cos(r)
+            cam.set_pos(c.x + c.fwd[0] * 0.15, c.y + c.fwd[1] * 0.15, c.spec["roof"] - 0.05); cam.set_hpr(c.h + ca["ang"], ca["pitch"], 0)
+            lens.set_fov(66); self.cam_h = c.h; return
+        fx0, fy0 = -math.sin(math.radians(me.h)), math.cos(math.radians(me.h))
+        face = 1.56
+        if ca["mode"] == "selfie":
+            ca["ang"] = max(-55, min(55, ca["ang"] + s * 50 * dt)); ca["pitch"] = max(-0.25, min(0.35, ca["pitch"] + v * 0.4 * dt))
+            r = math.radians(me.h + 14 + ca["ang"]); fx, fy = -math.sin(r), math.cos(r)
+            d = 0.92 if me.who == "ana" else 1.0; cz = face + 0.16 + ca["pitch"]
+            cam.set_pos(me.x + fx * d, me.y + fy * d, cz); cam.look_at(me.x + fx0 * 0.05, me.y + fy0 * 0.05, face - 0.12); lens.set_fov(64)
+            # pose: right arm out towards the lens holding the phone, left hand waves beside the face
+            wv = math.sin(t * 7.0)
+            me.set_arms((-78, 14), (-46 + 3 * wv, 30), (-14, 0), (-128 + 14 * wv, 4)); me.set_grip(True, False)
+            me.model.set_r(math.sin(t * 1.4) * 1.5)
+            pr = ca.get("prop")
+            if pr: pr.look_at(self.app.render, Point3(me.x + fx0 * 0.1, me.y + fy0 * 0.1, face)); pr.set_h(pr, 180)
+        else:
+            me.h = (me.h - s * 70 * dt) % 360; me.sync(); ca["pitch"] = max(-30, min(30, ca["pitch"] + v * 40 * dt))
+            me.set_arms((-70, 6), (-70, 6), (-35, 12), (-35, 12)); me.set_grip(True, True)
+            fx, fy = fx0, fy0
+            cam.set_pos(me.x + fx * 0.42, me.y + fy * 0.42, 1.42); cam.set_hpr(me.h, ca["pitch"], 0); lens.set_fov(66)
+        self.cam_h = me.h
 
     def phone_nav(self, d):
         if not self.phone: return
@@ -976,35 +1154,100 @@ class Game:
         if self.heat > 0: self.toast("Lose the police first!"); return
         self.cap_k = 0.0; self.cap1.setText(""); self.cap2.setText(""); self.big.setText("")
         X, Y = D.HOME_INT
-        self.home = {"mode": "room", "ret": self.player_pos(), "a": 0.0}
+        self.home = {"mode": "room", "ret": self.player_pos(), "a": 0.0, "spot": None}
         self.world.home_int.show()
-        me, bd = self.chars["ana"], self.chars["daniel"]
-        for p, (dx, dy, h) in ((me, (0.6, 1.6, 160)), (bd, (1.6, 1.7, 200))):
+        me, bd = self.me(), self.buddy()
+        for p, (dx, dy, h) in ((me, (4.0, -3.5, 0)), (bd, (4.9, -3.0, 20))):
             p.x, p.y, p.h = X + dx, Y + dy, h; p.sync(); p.np.show(); p.walk_anim(0.016, 0.0)
+        self.cam_yaw = 0.0; self.cam_pos = None
         self.home_cam(); self.home_panel(); self.app.sfx("door", 0.5); self.refresh_buttons(); self.fade(0.6)
+
+    def home_roam(self):
+        return self.home is not None and self.home.get("mode") == "room"
+
+    def home_cam_clear(self, tx, ty, x, y):
+        """keep the house camera inside the room and in front of walls / tall furniture (no clipping)"""
+        rs = self.world.home_cam_rects; b = self.world.home_bounds; m = 0.22
+        def bad(px, py):
+            if not (b[0] - 0.05 < px < b[2] + 0.05 and b[1] - 0.05 < py < b[3] + 0.05): return True
+            return any(r[0] - m < px < r[2] + m and r[1] - m < py < r[3] + m for r in rs)
+        n = 24; last = (tx, ty)
+        for k in range(1, n + 1):
+            f = k / n; px, py = tx + (x - tx) * f, ty + (y - ty) * f
+            if bad(px, py): return last
+            last = (px, py)
+        return last
 
     def home_cam(self):
         X, Y = D.HOME_INT; cam = self.app.camera; self.app.camLens.set_fov(62)
         if self.home and self.home.get("mode") == "wardrobe":
             a = self.chars["ana"]; cam.set_pos(a.x + 0.5, a.y + 2.9, 1.5); cam.look_at(a.x - 0.35, a.y, 0.95)
-        else:
-            cam.set_pos(X + 5.6, Y - 4.2, 2.6); cam.look_at(X - 0.6, Y + 1.2, 0.9)
+        else:                                       # v1.0.3: third-person follow camera, same feel as outside
+            me = self.me(); dt = getattr(self, "_home_dt", 0.016)
+            r = math.radians(self.cam_yaw); fx, fy = -math.sin(r), math.cos(r); dist, hgt = 3.1, 1.95
+            if self.cinematic > 0: self.cinematic -= dt
+            x, y = self.home_cam_clear(me.x, me.y, me.x - fx * dist + fy * 0.35, me.y - fy * dist - fx * 0.35)
+            if self.cam_pos is None: self.cam_pos = [x, y]
+            k = min(1, dt * 8); self.cam_pos[0] += (x - self.cam_pos[0]) * k; self.cam_pos[1] += (y - self.cam_pos[1]) * k
+            self.cam_pos[0], self.cam_pos[1] = self.home_cam_clear(me.x, me.y, self.cam_pos[0], self.cam_pos[1])
+            d = math.hypot(self.cam_pos[0] - me.x, self.cam_pos[1] - me.y)
+            cam.set_pos(self.cam_pos[0], self.cam_pos[1], min(2.75, hgt + max(0.0, 1.6 - d) * 0.35))
+            cam.look_at(me.x + fx * 1.5 + fy * 0.35, me.y + fy * 1.5 - fx * 0.35, 1.25); self.app.camLens.set_fov(68); self.cam_h = self.cam_yaw
+
+    def home_spot(self):
+        me = self.me(); best = None
+        for sp in self.world.home_spots:
+            d = math.hypot(me.x - sp[2], me.y - sp[3])
+            if d < sp[4] and (best is None or d < best[0]): best = (d, sp)
+        return best[1] if best else None
+
+    def home_use(self, sid=None):
+        if not self.home_roam(): return
+        if sid is None:
+            sp = self.home_spot()
+            if sp is None: return
+            sid = sp[0]
+        me = self.me()
+        if sid == "shower": self.start_shower()
+        elif sid == "wardrobe": self.open_wardrobe()
+        elif sid == "sleep": self.home_sleep()
+        elif sid == "save": self.save(); self.toast("Game saved"); self.app.sfx("click", 0.5)
+        elif sid == "tv":
+            self.toast("NEON CITY NEWS: police chase on the coast road...  %s relaxes" % NAMES[self.active])
+            me.health = min(100.0, me.health + 10.0); self.app.sfx("click", 0.5)
+        elif sid == "eat":
+            me.health = 100.0; self.toast("%s grabs a snack from the fridge  -  health full" % NAMES[self.active]); self.app.sfx("click", 0.5)
+        elif sid == "leave": self.leave_home()
+
+    def home_prompt(self):
+        """contextual [E] button for the closest thing in the house (clickable too)"""
+        sp = self.home_spot() if self.home_roam() else None
+        sid = sp[0] if sp else None
+        if self.home is None or sid == self.home.get("spot"): return
+        self.home["spot"] = sid
+        if getattr(self, "home_btn", None): self.home_btn.destroy(); self.home_btn = None
+        if sp is None: return
+        o = self.home_btn = DirectFrame(parent=self.app.a2dBottomCenter, frameColor=(0, 0, 0, 0), pos=(0, 0, 0.22))
+        U.button(o, "[E]  " + sp[1], (0, 0), self.home_use, w=0.3, h=0.06, scale=0.045, edge=(1.0, 0.55, 0.85, 1), extra=[sp[0]])
+
+    def home_prompt_off(self):
+        for k in ("home_btn", "home_info"):
+            n = getattr(self, k, None)
+            if n: n.destroy(); setattr(self, k, None)
+        if self.home: self.home["spot"] = None
 
     def home_panel(self):
         if self.overlay: self.overlay.destroy()
-        o = self.overlay = DirectFrame(parent=self.app.a2dLeftCenter, frameColor=(0, 0, 0, 0), pos=(0.45, 0, 0))
+        self.overlay = None                        # v1.0.3: no button menu any more - walk around, every spot has its own [E] button
+        if getattr(self, "home_btn", None): self.home_btn.destroy(); self.home_btn = None
+        if self.home: self.home["spot"] = None
+        if getattr(self, "home_info", None): self.home_info.destroy()
         pk = (1.0, 0.55, 0.85, 1)
-        U.panel(o, -0.38, 0.38, -0.62, 0.62, edge=pk)
-        U.text(o, "HOME", (0, 0.5), 0.075, fg=pk)
-        U.text(o, "ANA & DANIEL'S HOUSE", (0, 0.43), 0.03, font=U.FONT_PLAIN)
+        o = self.home_info = DirectFrame(parent=self.app.a2dTopLeft, frameColor=(0, 0, 0, 0), pos=(0.05, 0, -0.08))
         h = int(self.tod); mi = int((self.tod - h) * 60)
-        U.text(o, "%02d:%02d" % (h, mi), (0, 0.35), 0.04, fg=(1, 1, 1, 0.8))
-        U.button(o, "SLEEP", (0, 0.22), self.home_sleep, w=0.3, h=0.05, scale=0.04, edge=pk)
-        U.text(o, "skip to morning / evening + save", (0, 0.15), 0.022, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.6))
-        U.button(o, "SAVE GAME", (0, 0.04), lambda: (self.save(), self.toast("Game saved")), w=0.3, h=0.05, scale=0.04)
-        U.button(o, "WARDROBE", (0, -0.1), self.open_wardrobe, w=0.3, h=0.05, scale=0.04, hint="E")
-        U.button(o, "SHOWER", (0, -0.24), self.start_shower, w=0.3, h=0.05, scale=0.04)
-        U.button(o, "LEAVE HOME", (0, -0.45), self.leave_home, w=0.3, h=0.06, scale=0.042, edge=U.CYAN, hint="Esc")
+        U.text(o, "HOME  %02d:%02d" % (h, mi), (0.0, 0), 0.055, fg=pk, align=TextNode.A_left, shadow=(0, 0, 0, 0.8))
+        U.text(o, "WASD walk  -  Shift run  -  walk up to things and press E  -  Q switch  -  Esc leave", (0.0, -0.07), 0.04,
+               font=U.FONT_PLAIN, fg=(1, 1, 1, 0.95), align=TextNode.A_left, shadow=(0, 0, 0, 0.9))
 
     def home_sleep(self):
         self.tod = 8.0 if (self.tod >= 17.0 or self.tod < 6.0) else 20.0
@@ -1029,7 +1272,7 @@ class Game:
             s_ = fx.attach_new_node(cm2.generate()); s_.set_billboard_point_eye(); s_.set_texture(self.world.T("glow.png", repeat=False))
             s_.set_pos(sx + random.uniform(-0.4, 0.4), sy + random.uniform(-0.5, 0.5), random.uniform(0.6, 2.4)); steam.append([s_, random.uniform(0, 6.28)])
         fx.set_transparency(TransparencyAttrib.M_alpha); fx.set_depth_write(False); fx.set_light_off(); fx.set_bin("transparent", 30)
-        self.home["drops"] = drops; self.home["steam"] = steam
+        self.home["drops"] = drops; self.home["steam"] = steam; self.home_prompt_off()
         if self.overlay: self.overlay.destroy()
         o = self.overlay = DirectFrame(parent=self.app.a2dBottomCenter, frameColor=(0, 0, 0, 0), pos=(0, 0, 0.16))
         U.button(o, "EXIT SHOWER", (0, 0), self.end_shower, w=0.26, h=0.055, scale=0.042, edge=U.CYAN, hint="E")
@@ -1038,17 +1281,18 @@ class Game:
     def end_shower(self):
         self.arsenal.unequip()
         if not self.home or self.home.get("mode") != "shower": return
-        me = self.me(); me.set_outfit(self.home.get("prev", "default")); me.health = 100.0
+        me = self.me(); me.set_outfit(self.home.get("prev", "default")); me.health = 100.0; me.stop_scrub()
         if self.home.get("fx"): self.home["fx"].remove_node()
         for k in ("fx", "drops", "steam"): self.home.pop(k, None)
-        X, Y = D.HOME_INT; me.x, me.y, me.h = X + 0.6, Y + 1.6, 160; me.sync()
-        bd = self.buddy(); bd.x, bd.y, bd.h = X + 1.6, Y + 1.7, 200; bd.sync()
+        X, Y = D.HOME_INT; me.x, me.y, me.h = X - 6.1, Y + 3.5, 0; me.sync(); self.cam_yaw = 180.0; self.cam_pos = None
+        bd = self.buddy(); bd.x, bd.y, bd.h = X - 4.6, Y + 3.9, 120; bd.sync()
         self.home["mode"] = "room"; self.fade(0.8); self.save(); self.toast("Fresh!  Health restored  -  game saved"); self.home_panel()
 
     def update_home(self, dt):
         X, Y = D.HOME_INT
         if self.home.get("mode") == "shower":
             h = self.home; h["t"] += dt; me = self.me(); me.health = min(100.0, me.health + dt * 15)
+            me.scrub(dt)                       # v1.0.3: ANA / DANIEL actively scrub (hair, shoulders, arms), hands alternating
             sx, sy = self.world.shower_pos
             for d in h["drops"]:
                 z = d.get_z() - dt * 5.5
@@ -1061,9 +1305,12 @@ class Game:
             a = math.radians(35 * math.sin(h["t"] * 0.12)); cam = self.app.camera
             cam.set_pos(sx + math.cos(a) * 4.2, sy + math.sin(a) * 2.4 - 0.6, 2.0); cam.look_at(sx, sy, 1.15); self.app.camLens.set_fov(60)
             return
-        X, Y = D.HOME_INT
+        X, Y = D.HOME_INT; self._home_dt = dt
         if self.home.get("mode") == "wardrobe":
             a = self.chars["ana"]; a.h = (a.h + dt * 40) % 360; a.sync()
+        elif self.home.get("mode") == "room":
+            self.move_on_foot(self.me(), dt); self.follow(self.buddy(), self.me(), dt)
+            self.home_prompt()
         self.home_cam()
 
     def open_wardrobe(self):
@@ -1071,7 +1318,7 @@ class Game:
         from fs_people import OUTFITS
         X, Y = D.HOME_INT
         a = self.chars["ana"]; a.x, a.y, a.h = X - 3.1, Y - 3.3, 0; a.sync()
-        self.home["mode"] = "wardrobe"; self.home["orig"] = self.outfit; self.home["pick"] = self.outfit
+        self.home["mode"] = "wardrobe"; self.home["orig"] = self.outfit; self.home["pick"] = self.outfit; self.home_prompt_off()
         if self.overlay: self.overlay.destroy()
         o = self.overlay = DirectFrame(parent=self.app.a2dLeftCenter, frameColor=(0, 0, 0, 0), pos=(0.45, 0, 0))
         pk = (1.0, 0.55, 0.85, 1)
@@ -1100,14 +1347,16 @@ class Game:
             self.outfit = self.home["pick"]; self.save(); self.toast("ANA is now wearing: %s" % self.outfit.upper())
         else:
             a.set_outfit(self.home.get("orig", self.outfit))
-        X, Y = D.HOME_INT; a.x, a.y, a.h = X + 0.6, Y + 1.6, 160; a.sync()
+        X, Y = D.HOME_INT; a.x, a.y, a.h = X - 3.1, Y - 3.5, 0; a.sync(); self.cam_yaw = 180.0; self.cam_pos = None
+        if self.active != "ana":
+            a.x, a.y = X - 2.5, Y - 2.8; a.sync()
         self.home["mode"] = "room"; self.home_panel()
 
     def leave_home(self):
         self.arsenal.unequip()
         if not self.home: return
         if self.home.get("mode") == "wardrobe": self.close_wardrobe(False)
-        self.world.home_int.hide(); self.home = None
+        self.home_prompt_off(); self.world.home_int.hide(); self.home = None
         if self.overlay: self.overlay.destroy(); self.overlay = None
         hx, hy = D.HOME_POS
         self.me().x, self.me().y, self.me().h = hx + 1.5, hy - 2.5, -90; self.buddy().x, self.buddy().y = hx + 1.5, hy - 4.0
@@ -1313,7 +1562,7 @@ class Game:
         if self.phone is not None and getattr(self.phone, "driving", None) is not None and self.phone.driving != (self.pcar is not None):
             self.phone_screen(self.phone.which); return
         st = (self.pcar is not None, self.ride is not None and self.ride.get("mode"), self.phone is not None, self.overlay is not None,
-              self.garage is not None or self.home is not None, self.active, self.app.settings.get("buttons", True), bool(self.near_marker()) if hasattr(self, "markers") else False)
+              self.garage is not None or self.home is not None or self.camapp is not None, self.active, self.app.settings.get("buttons", True), bool(self.near_marker()) if hasattr(self, "markers") else False)
         if st == self.btn_state: return
         self.btn_state = st
         for n in getattr(self, "btn_nodes", []): n.destroy()
@@ -1321,7 +1570,7 @@ class Game:
         if self.btn_root: self.btn_root.destroy()
         self.vb.clear()
         a = self.app; root = self.btn_root = DirectFrame(parent=a.aspect2d, frameColor=(0, 0, 0, 0))
-        if not a.settings.get("buttons", True) or self.garage or self.home: return
+        if not a.settings.get("buttons", True) or self.garage or self.home or self.camapp: return
         tl = DirectFrame(parent=a.a2dTopLeft, frameColor=(0, 0, 0, 0)); self.btn_nodes.append(tl)
         self.btn_tl = tl; root.tl = tl
         sm = dict(w=0.105, h=0.04, scale=0.03)
@@ -1481,7 +1730,7 @@ class Game:
         c = self.pcar
         sp = c.speed * 3.6 if c else 0.0
         self.speed_t.setText("%d" % sp if c else ""); self.kmh_t.setText("km/h" if c else "")
-        hud_on = self.garage is None and self.home is None
+        hud_on = self.garage is None and self.home is None and self.camapp is None
         for n in (self.cash_t, self.stars_t, self.hp_bar[0], self.mm_root):
             n.show() if hud_on else n.hide()
         self.nitro_bar[0].show() if c else self.nitro_bar[0].hide()
@@ -1617,11 +1866,13 @@ class Game:
         else: self.stuck_t = max(0.0, self.stuck_t - dt)
 
     def update(self, task):
-        dt = min(0.05, self.app.clock.get_dt())
+        # v1.0.3: real-time sub-stepping. Frames slower than 20 fps used to be clamped to a 0.05 s step, so on a busy
+        # scene (beach / dense sidewalks) ANA & DANIEL walked in slow motion; now up to 4 sub-steps keep normal speed.
+        raw = max(0.0, min(0.2, self.app.clock.get_dt()))
         if self.paused: return task.cont
-        dt *= self.time_scale
+        n = max(1, int(math.ceil(raw / 0.05))); dt = raw / n * self.time_scale
         try:
-            self.step(dt)
+            for _ in range(n): self.step(dt)
         except Exception as e:
             self.app.log_error(e)
         return task.cont
@@ -1647,7 +1898,7 @@ class Game:
         self.time += dt
         self.update_daynight(dt)
         if self.home:
-            self.update_home(dt); self.update_hud(dt); self.app.update_audio(self, dt); return
+            self.update_home(dt); self.update_camapp(dt); self.update_hud(dt); self.app.update_audio(self, dt); return
         if self.intro_t > 0:
             self.intro_t -= dt
             if self.intro_t <= 0: self.letterbox(False); self.cam_pos = None
@@ -1674,6 +1925,7 @@ class Game:
         for m in self.markers:
             if "np" in m: m["np"].set_h(self.time * 30)
         self.update_camera(dt)
+        self.update_camapp(dt)
         self.update_hud(dt)
         self.app.update_audio(self, dt)
 

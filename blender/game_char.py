@@ -17,6 +17,11 @@ BARE = OUTFIT in ("bikini", "swim")
 if OUTFIT != "default": SUF = "_" + OUTFIT
 D2 = np.load(CD + "char_%s.npz" % OUTFIT) if OUTFIT in ("bikini", "police", "swim") else None
 D = np.load(CD + "char.npz"); HH = np.load(CD + "hair.npz"); rig = json.load(open(CD + "rig.json"))
+# v1.0.3: arms hang free at the sides and are split into their own pivoting nodes (armR/armL) so the game can swing them
+import character as C
+if WHO == "daniel": import daniel   # applies Daniel's anatomy patches (torso/arm/neck) to the character module
+def arm_d(c, side): return C.arm(np.asarray(c, np.float32), side)
+def trunk_d(c): return C.body_noarms(np.asarray(c, np.float32))
 
 def obj(name, V, F, attrs=None):
     return mesh_from_arrays(name, V, F, smooth=True, attrs=attrs)
@@ -39,7 +44,12 @@ hk = [k[7:] for k in D.files if k.startswith("head_m_")]
 head = obj("skin", D["head_V"], D["head_F"], {k: D["head_m_" + k] for k in hk})
 _BD = D2 if (D2 is not None and "body_V" in D2.files) else D     # bikini: owner-requested larger bust body variant
 body = obj("body", _BD["body_V"], _BD["body_F"], {k: np.zeros(len(_BD["body_V"]), np.float32) for k in hk})
-del_faces(body, lambda c: c.z < 0.99)                      # legs/hips are covered by the trousers
+def del_faces_vec(o, pred_arr):
+    bm = bmesh.new(); bm.from_mesh(o.data); fs = list(bm.faces)
+    cen = np.array([f.calc_center_median()[:] for f in fs], np.float32); kill = pred_arr(cen)
+    bmesh.ops.delete(bm, geom=[f for f, k in zip(fs, kill) if k], context="FACES"); bm.to_mesh(o.data); bm.free()
+# legs/hips are covered by the trousers (or the separate bare-leg mesh); the hanging arms/hands are kept
+del_faces_vec(body, lambda c: (c[:, 2] < 0.99) & (np.minimum(arm_d(c, "R"), arm_d(c, "L")) > trunk_d(c)))
 decimate(head, 14000); decimate(body, 7000)
 activate(head); body.select_set(True)
 if BARE:   # bare legs + feet
@@ -141,6 +151,26 @@ def split_off(o, pred, name):
     for p in nm.polygons: p.use_smooth = True
     no.data.materials.append(o.data.materials[0]); return no
 CR = 0.86
+def split_arm(o, side, name, margin_copy=0.008, margin_del=0.004):
+    """copy the faces nearer this arm than the trunk into a new object (small overlap band so no gap opens when it swings)"""
+    def mask(off):
+        cen = np.array([f.center[:] for f in o.data.polygons], np.float32)
+        return (arm_d(cen, side) < trunk_d(cen) + off) & (cen[:, 2] < rig["SEAM_Z"]) & (np.sign(cen[:, 0]) == (-1 if side == "R" else 1))
+    activate(o); bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
+    m = mask(margin_copy)
+    for f, k in zip(o.data.polygons, m): f.select = bool(k)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.duplicate(); bpy.ops.mesh.separate(type="SELECTED"); bpy.ops.object.mode_set(mode="OBJECT")
+    no = [x for x in bpy.context.selected_objects if x is not o][0]; no.name = name
+    m = mask(-margin_del)
+    activate(o); bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
+    for f, k in zip(o.data.polygons, m): f.select = bool(k)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.delete(type="FACE"); bpy.ops.object.mode_set(mode="OBJECT")
+    return no
+arms = {sd: split_arm(skin, sd, "arm" + sd) for sd in ("R", "L")}
+sleeves = {}
+if (WHO == "daniel" and OUTFIT == "default") or OUTFIT == "police":     # short sleeves swing with the arm
+    sleeves = {sd: split_arm(tank, sd, "sleeve" + sd, 0.004, 0.004) for sd in ("R", "L")}
+print("ARMS", {k: len(v.data.polygons) for k, v in arms.items()}, {k: len(v.data.polygons) for k, v in sleeves.items()}, flush=True)
 def sep(o, pred, name):   # UV-preserving split (bare skin legs keep the baked skin texture)
     activate(o); bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
     for f in o.data.polygons: f.select = pred(f.center)
@@ -219,6 +249,60 @@ activate(hair); brows.select_set(True); lashes.select_set(True); _so.select_set(
 for leg, side in ((legR, "R"), (legL, "L")):
     hp = rig["S"]["hip" + side]
     sc.cursor.location = (hp[0], hp[1], CR + 0.03); activate(leg); bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+# forearms (elbow pivot) split off each arm, again with a small overlap band
+def split_fore(o, sd, name):
+    sh = np.array(rig["S"]["sho" + sd]); el = np.array(rig["S"]["elb" + sd]); ax = el - sh; L2 = float(ax @ ax)
+    def mask(t0):
+        cen = np.array([f.center[:] for f in o.data.polygons]); return ((cen - sh) @ ax) / L2 > t0
+    activate(o); bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
+    for f, k in zip(o.data.polygons, mask(0.94)): f.select = bool(k)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.duplicate(); bpy.ops.mesh.separate(type="SELECTED"); bpy.ops.object.mode_set(mode="OBJECT")
+    no = [x for x in bpy.context.selected_objects if x is not o][0]; no.name = name
+    activate(o); bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
+    for f, k in zip(o.data.polygons, mask(1.04)): f.select = bool(k)
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.delete(type="FACE"); bpy.ops.object.mode_set(mode="OBJECT")
+    return no
+fores = {sd: split_fore(arms[sd], sd, "fore" + sd) for sd in ("R", "L")}
+# v1.0.3: real hands (palm + 4 fingers + thumb) replace the sculpt's mitten; relaxed + gripping variants, skin tone sampled
+# from the baked skin around the wrist so the joint is seamless
+HD = np.load(CD + "hands.npz")
+def _wrist_u(o, sd):
+    wr = np.array(rig["S"]["wri" + sd]); hd = np.array(rig["S"]["hnd" + sd]); ax = (hd - wr) / np.linalg.norm(hd - wr)
+    cen = np.array([f.center[:] for f in o.data.polygons]); return (cen - wr) @ ax
+_px = np.empty(img_c.size[0] * img_c.size[1] * 4, np.float32); img_c.pixels.foreach_get(_px); _px = _px.reshape(img_c.size[1], img_c.size[0], 4)
+hand_objs = {}
+for sd in ("R", "L"):
+    fo = fores[sd]; u = _wrist_u(fo, sd)
+    # sample skin colour on the forearm just above the wrist
+    uvl = fo.data.uv_layers.active.data; cols = []
+    for f, uu in zip(fo.data.polygons, u):
+        if -0.06 < uu < -0.01:
+            for li in f.loop_indices:
+                x, y = uvl[li].uv; cols.append(_px[min(img_c.size[1] - 1, int(y * img_c.size[1])), min(img_c.size[0] - 1, int(x * img_c.size[0])), :3])
+    tone = tuple(0.92 * float(c) for c in np.median(np.array(cols), 0)) if cols else (0.74, 0.57, 0.5)
+    print("HAND TONE", sd, tone, len(cols), flush=True)
+    activate(fo); bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="DESELECT"); bpy.ops.object.mode_set(mode="OBJECT")
+    for f, uu in zip(fo.data.polygons, u): f.select = bool(uu > 0.004)          # cut the mitten off just past the wrist
+    bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.delete(type="FACE"); bpy.ops.object.mode_set(mode="OBJECT")
+    hm = pmat("hand" + sd, tone, 0.55)
+    for nm, key in (("fingers" + sd, "hand" + sd), ("fist" + sd, "grip" + sd)):
+        ho = obj(nm, HD[key + "_V"], HD[key + "_F"]); decimate(ho, 3200); ho.data.materials.append(hm); hand_objs[nm] = (ho, sd)
+# arms pivot at the shoulder joint, forearms at the elbow; sleeves + a hand anchor (weapon grip) ride along
+for sd, arm in arms.items():
+    sh = rig["S"]["sho" + sd]; el = rig["S"]["elb" + sd]
+    sc.cursor.location = (sh[0], sh[1], sh[2] - 0.015); activate(arm); bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+    sc.cursor.location = tuple(el); activate(fores[sd]); bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+bpy.context.view_layer.update()
+for sd, arm in arms.items():
+    fo = fores[sd]; fo.parent = arm; fo.matrix_parent_inverse = arm.matrix_world.inverted()
+    for nm, (ho, hs) in hand_objs.items():
+        if hs == sd: ho.parent = fo; ho.matrix_parent_inverse = fo.matrix_world.inverted()
+    if sd in sleeves:
+        sleeves[sd].parent = arm; sleeves[sd].matrix_parent_inverse = arm.matrix_world.inverted()
+    hn = rig["S"]["hnd" + sd]; wr = rig["S"]["wri" + sd]
+    e = bpy.data.objects.new("hand" + sd, None); bpy.context.collection.objects.link(e)
+    e.location = (0.5 * (hn[0] + wr[0]), 0.5 * (hn[1] + wr[1]) - 0.01, 0.5 * (hn[2] + wr[2]) - 0.01)
+    bpy.context.view_layer.update(); e.parent = fo; e.matrix_parent_inverse = fo.matrix_world.inverted()
 if BARE:
     bpy.context.view_layer.update()
     for s_, leg in _ff_pairs:

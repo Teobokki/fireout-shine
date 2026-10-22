@@ -8,12 +8,15 @@ Neon street racing and police chases through **Shinko Ward**, an original night-
 Get the installer, portable exe or zip from the [latest release](https://github.com/Teobokki/fireout-shine/releases/latest).
 Also installable and auto-updated from **HYPERION DIGITAL EX**.
 
-## Features (v1.0.2)
+## Features (v1.0.3)
 - Open neon city: scramble crossing with giant video screens, sign-covered streets, elevated expressway, the original 新光タワー lattice tower, power lines, lanterns, shopfronts; HIKARI BEACH with boardwalk, pier and palms
 - Day/night cycle (24 real minutes = 24 h): blue daytime sky with drifting cumulus clouds, sun and horizon haze, golden hour, then neon night; lock Day or Night in Settings
 - Slim modern glass skyscrapers with mullions, setbacks and crowns; turquoise shallows at the beach
 - ADD MONEY in the pause menu: type an amount or use +1K / +100K / +1M / +1B / +10B / MAX; total cash is capped at ¥100,000,000,000 (v1.0.2)
 - The EX IX G9 phone sits left of the speedometer and driving buttons while you drive (v1.0.2)
+- ANA and DANIEL's arms hang naturally, with real five-digit hands, and move: they swing when you walk and run, hold weapons in hand, grip the wheel and scrub in the shower (v1.0.3)
+- Walk freely around ANA & DANIEL'S HOUSE: every spot (shower, wardrobe, bed, laptop save, TV, fridge, front door) shows an [E] button when you are near it (v1.0.3)
+- DANIEL's modern short haircut, plus smooth walking on HIKARI BEACH sand, the boardwalk, the pier and over kerbs at any frame rate (v1.0.3)
 - Six districts with names in English and Japanese, tinted on the minimap and full map, with a popup when you enter one
 - Play as ANA or DANIEL and switch any time (Q); your partner follows on foot and rides with you
 - Take any car (F): the driver jumps out and runs off. 10 original car designs
@@ -21,6 +24,7 @@ Also installable and auto-updated from **HYPERION DIGITAL EX**.
 - 指名手配される GET WANTED: police chases with heat stars: break line of sight to escape, or get BUSTED
 - FRGARAGE: paint colours and custom plates (up to 8 characters), saved per car
 - EX IX G9 phone: Emergency Services (ambulance) and JP TAXI with destination picker and skip-trip
+- CAMERA app on the phone: selfies with a pose (ANA or DANIEL), a rear camera, and photos saved to Pictures\FIREOUT SHINE (v1.0.3)
 - Weapon wheel (hold Tab): fists, baseball bat, pickaxe, taser, pistol, SMG, shotgun; KAZAN SUPPLY ammo refill. Non-gory: people get knocked down and flee
 - Stable arcade driving model (no flipping, sub-stepped collisions, auto-unstick and R reset)
 - Voiced English + Japanese street chatter (offline TTS) with subtitles; duo banter

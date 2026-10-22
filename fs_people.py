@@ -79,9 +79,26 @@ class Person:
         ey = m.find("**/eyes")
         if not ey.is_empty():
             ey.set_texture(tex(app, "eye_c%s.png" % suf), 1); fs_shaders.apply(ey, app, gloss=0.9, tex=True)
+        # v1.0.3: arms hang free at the sides (separate shoulder-pivot nodes that swing / hold weapons)
+        self.armR = m.find("**/armR"); self.armL = m.find("**/armL")
+        self.foreR = m.find("**/foreR"); self.foreL = m.find("**/foreL")
+        self.handR = m.find("**/handR"); self.handL = m.find("**/handL")
+        self.scrub_t = None         # shower scrub animation clock (None = off)
+        for ar in (self.armR, self.armL):
+            if ar.is_empty(): continue
+            for gn in ar.find_all_matches("**/+GeomNode"):
+                if "sleeve" in str(gn): continue        # shirt sleeves keep the cloth material
+                if "fingers" in str(gn) or "fist" in str(gn):   # hands: skin-tone material (no baked UVs), same skin shading
+                    fs_shaders.apply(gn, app, gloss=0.22, sheen=0.8); continue
+                gn.set_texture(tex(app, "skin_c%s.png" % suf), 1)
+                fs_shaders.apply(gn, app, gloss=0.22, tex=True, nmap=tex(app, "skin_n%s.png" % suf), sheen=0.8)
+        self.arm_pose = None        # (pitchR, pitchL) override from the weapon code; None = natural swing
+        self.hand_np = {sd: (m.find("**/fingers" + sd), m.find("**/fist" + sd)) for sd in ("R", "L")}
+        self.set_grip(False, False)
         sh = m.find("**/tank")
         if base == "daniel" and not sh.is_empty():
-            sh.set_texture(tex(app, "floral.png"), 1); fs_shaders.apply(sh, app, gloss=0.1, tex=True, sheen=0.5)
+            for n in [sh] + list(m.find_all_matches("**/sleeve*")):
+                n.set_texture(tex(app, "floral.png"), 1); fs_shaders.apply(n, app, gloss=0.1, tex=True, sheen=0.5)
         hr = m.find("**/hair")
         if not hr.is_empty():
             fs_shaders.apply(hr, app, gloss=0.35, sheen=0.3); hr.set_two_sided(True)
@@ -123,9 +140,78 @@ class Person:
         bob = abs(math.sin(self.phase)) * 0.035 * min(1.0, speed / 1.5)
         self.model.set_z(bob); self.model.set_p(-k * 6)
         self.model.set_r(math.sin(self.phase) * 1.5 * min(1.0, speed / 2))
+        self.swing_arms(a, k, speed)
+
+    OUT = 1.0          # roll sign that splays the RIGHT arm outward (the left arm uses the opposite sign)
+
+    def set_arms(self, ar, al, fr=None, fl=None):
+        """ar/al = (pitch, roll_out) for the upper arms, fr/fl = (pitch, roll_in) for the forearms. Negative pitch = forward/up."""
+        if self.armR.is_empty(): return
+        o = self.OUT
+        self.armR.set_hpr(0, ar[0], o * ar[1]); self.armL.set_hpr(0, al[0], -o * al[1])
+        if not self.foreR.is_empty():
+            fr = fr or (0, 0); fl = fl or (0, 0)
+            self.foreR.set_hpr(0, fr[0], o * fr[1]); self.foreL.set_hpr(0, fl[0], -o * fl[1])
+
+    def set_grip(self, r, l=False):
+        """closed (gripping / fist) or relaxed open hands"""
+        for sd, on in (("R", r), ("L", l)):
+            op, cl = self.hand_np.get(sd, (NodePath(), NodePath()))
+            if op.is_empty() or cl.is_empty(): continue
+            if on: op.hide(); cl.show()
+            else: op.show(); cl.hide()
+        self.grip = (bool(r), bool(l))
+
+    def swing_arms(self, a, k, speed):
+        """arms hang relaxed at the sides and swing opposite to the legs (negative pitch = forward)."""
+        if self.armR.is_empty(): return
+        if self.scrub_t is not None: return
+        mv = min(1.0, speed / 1.2)
+        sw = a * (0.85 + 0.35 * k)                      # walk ~ +-20 deg, run ~ +-40 deg
+        base = -8.0 * k * mv                            # running: arms carried slightly forward
+        breathe = 0.0 if mv > 0.05 else math.sin(self.phase * 0.35) * 1.2
+        pr, pl = base + sw + breathe, base - sw + breathe
+        # elbows: soft bend at rest, more on the forward swing, ~80 deg when running
+        er = -10 - 0.45 * max(0.0, -pr) - 70 * k * mv; el = -10 - 0.45 * max(0.0, -pl) - 70 * k * mv
+        if self.arm_pose is not None:
+            ap = tuple(self.arm_pose) + (None,) * (4 - len(self.arm_pose))
+            if ap[0] is not None: pr = ap[0]; er = ap[2] if ap[2] is not None else -8
+            if ap[1] is not None: pl = ap[1]; el = ap[3] if ap[3] is not None else -8
+        self.set_arms((pr, 3.0 + 3.0 * k), (pl, 3.0 + 3.0 * k), (er, 0), (el, 0))
+
+    # ---- shower: looping, alternating scrub (hair -> left shoulder/arm -> right shoulder/arm), swimsuit stays on
+    @staticmethod
+    def _mix(a, b, t):
+        t = t * t * (3 - 2 * t); return [x + (y - x) * t for x, y in zip(a, b)]
+
+    def scrub(self, dt):
+        if self.armR.is_empty(): return
+        if self.scrub_t is None: self.scrub_t = 0.0
+        t = self.scrub_t = self.scrub_t + dt
+        w = math.sin(t * 10.5); w2 = math.sin(t * 10.5 + math.pi)       # quick scrubbing strokes, hands alternate
+        # pose vector: armR(p, roll_out), foreR(p, roll_in), armL(p, roll_out), foreL(p, roll_in)
+        HAIR = [-4 + 8 * w, 98, 0, 136 + 10 * w, -4 + 8 * w2, 98, 0, 136 + 10 * w2]          # both hands lathering the hair
+        NECK_R = [-112 + 8 * w, 38, -118 + 10 * w2, 12, -12, 8, -40, 0]                         # right hand scrubs neck / shoulder
+        NECK_L = [-12, 8, -40, 0, -112 + 8 * w2, 38, -118 + 10 * w, 12]                         # left hand scrubs neck / shoulder
+        ARM_L = [-62, -30 + 9 * w, -55 + 10 * w2, 30, -35, 70, -5, 0]                          # left arm out, right hand rubs along it
+        ARM_R = [-35, 70, -5, 0, -62, -30 + 9 * w2, -55 + 10 * w, 30]                          # right arm out, left hand rubs along it
+        seq = [HAIR, NECK_R, ARM_L, HAIR, NECK_L, ARM_R]; seg = 2.4; c = (t / seg) % len(seq); i = int(c); f = c - i
+        cur = seq[i]; nxt = seq[(i + 1) % len(seq)]
+        v = self._mix(cur, nxt, max(0.0, (f - 0.78) / 0.22))
+        self.set_arms((v[0], v[1]), (v[4], v[5]), (v[2], v[3]), (v[6], v[7]))
+        self.model.set_r(math.sin(t * 1.3) * 2.0); self.model.set_p(math.sin(t * 0.9) * 1.5)
+
+    def stop_scrub(self):
+        self.scrub_t = None; self.model.set_r(0); self.model.set_p(0); self.set_arms((0, 3), (0, 3), (-10, 0), (-10, 0))
 
     def sync(self, z=0.0):
-        self.np.set_pos(self.x, self.y, z + (0.15 if self.g.world.on_sidewalk(self.x, self.y) else 0.0)); self.np.set_h(self.h)
+        # v1.0.3: follow the real walkable height (sidewalk kerb, boardwalk, pier, sloped sand) and ease up/down kerbs so a
+        # step is a quick smooth step instead of a pop
+        gz = self.g.world.ground_z(self.x, self.y) if hasattr(self.g.world, "ground_z") else (0.15 if self.g.world.on_sidewalk(self.x, self.y) else 0.0)
+        cur = getattr(self, "_gz", None)
+        cur = gz if cur is None or abs(gz - cur) > 0.45 else cur + (gz - cur) * 0.45
+        self._gz = cur
+        self.np.set_pos(self.x, self.y, z + cur); self.np.set_h(self.h)
 
     def knock_down(self, dirx, diry, power):
         self.knock = 2.4
@@ -152,11 +238,17 @@ class Person:
         for lg in (self.legL, self.legR):
             if not lg.is_empty(): lg.hide()
         self.model.set_p(0); self.model.set_z(0); self.model.set_r(0)
+        if not self.armR.is_empty():     # driver: hands up on the wheel; passenger: hands resting on the lap
+            drv = side == 1
+            if drv: self.set_arms((-38, 6), (-38, 6), (-48, 8), (-48, 8))
+            else: self.set_arms((-12, 4), (-12, 4), (-62, 6), (-62, 6))
+            self.set_grip(drv, drv)
 
     def unseat(self, x, y, h):
         self.in_car = None; self.np.reparent_to(self.app.render)
         for lg in (self.legL, self.legR):
             if not lg.is_empty(): lg.show(); lg.set_p(0)
+        self.set_arms((0, 3), (0, 3), (-10, 0), (-10, 0)); self.set_grip(False, False)
         self.x, self.y, self.h = x, y, h; self.sync()
 
     def destroy(self):

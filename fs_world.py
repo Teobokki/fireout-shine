@@ -89,6 +89,7 @@ class World:
         self.nodes = {}; self.edges = []; self.build_graph()
         self.parking = []       # (x, y, heading_deg)
         self.ped_loops = []     # list of polyline loops on sidewalks
+        self.dunes = []         # raised sand mounds (x0, y0, x1, y1) at z 0.05 - used for on-foot ground height
         self.signposts = []
         self.build()
 
@@ -167,6 +168,20 @@ class World:
         if not (0 <= i < D.N_BLOCKS and 0 <= j < D.N_BLOCKS): return False
         x0, y0, x1, y1 = block_rect(i, j)
         return x0 <= x <= x1 and y0 <= y <= y1
+
+    def ground_z(self, x, y):
+        """walkable surface height for people on foot (v1.0.3: feet follow the boardwalk, pier deck, sloped sand, dunes and kerbs
+        instead of sinking into them)."""
+        if self.on_pier(x, y): return 0.3
+        if self.on_sidewalk(x, y): return 0.15
+        if D.BOARDWALK[0] <= x <= D.BOARDWALK[1] and -440 <= y <= 440: return 0.2
+        if self.in_lot(x, y): return 0.04
+        if D.SAND[0] < x <= D.SEA_X + 4:
+            z = 0.02 - 0.17 * (x - D.SAND[0]) / (D.SEA_X + 4 - D.SAND[0])
+            for x0, y0, x1, y1 in self.dunes:
+                if x0 <= x <= x1 and y0 <= y <= y1: return max(z, 0.05)
+            return z
+        return 0.0
 
     def on_pier(self, x, y):
         return 560 <= x <= 690 and 140 <= y <= 156
@@ -770,6 +785,7 @@ class World:
             if r[0] - 4 < dx < r[2] + 4 and r[1] - 4 < dy < r[3] + 4: continue
             w_, l_ = rng.uniform(6, 16), rng.uniform(8, 22); c0 = rng.uniform(0.47, 0.6)
             s.quad((dx - w_, dy - l_, 0.05), (dx + w_, dy - l_, 0.05), (dx + w_, dy + l_, 0.05), (dx - w_, dy + l_, 0.05), (c0, c0 * 0.86, c0 * 0.66, 1), n=(0, 0, 1))
+            self.dunes.append((dx - w_, dy - l_, dx + w_, dy + l_))
         cols = [(0.95, 0.2, 0.3), (0.2, 0.6, 1.0), (1.0, 0.85, 0.2), (0.3, 0.9, 0.5), (1.0, 0.5, 0.1), (0.8, 0.3, 0.9)]
         for k in range(70):
             ux, uy = rng.uniform(515, 592), rng.uniform(-420, 420)
@@ -858,6 +874,8 @@ class World:
         m.box(X + 0.0, Y - 4.9, 0.9, X + 2.5, Y - 4.8, 2.3, (0.02, 0.02, 0.03, 1))
         m.quad((X + 0.08, Y - 4.79, 0.98), (X + 2.42, Y - 4.79, 0.98), (X + 2.42, Y - 4.79, 2.22), (X + 0.08, Y - 4.79, 2.22),
                ((0.3, 0.5, 1.6, 1), (1.4, 0.3, 1.1, 1), (1.6, 0.6, 0.9, 1), (0.4, 0.9, 1.6, 1)), n=(0, 1, 0))           # TV picture
+        m.quad((X + 2.42, Y - 4.785, 0.98), (X + 0.08, Y - 4.785, 0.98), (X + 0.08, Y - 4.785, 2.22), (X + 2.42, Y - 4.785, 2.22),
+               ((1.6, 0.6, 0.9, 1), (0.3, 0.5, 1.6, 1), (0.4, 0.9, 1.6, 1), (1.4, 0.3, 1.1, 1)), n=(0, 1, 0))           # v1.0.3: picture faces the room
         # kitchen along the right wall
         m.box(X + 5.3, Y - 4.6, 0, X + 6.95, Y + 1.0, 0.92, (0.93, 0.93, 0.92, 1)); m.box(X + 5.25, Y - 4.65, 0.92, X + 6.98, Y + 1.05, 0.97, (0.22, 0.22, 0.24, 1))
         m.box(X + 6.4, Y - 4.6, 1.6, X + 6.95, Y + 1.0, 2.4, (0.93, 0.93, 0.92, 1)); m.box(X + 5.3, Y + 1.3, 0, X + 6.95, Y + 2.3, 2.1, (0.70, 0.72, 0.75, 1))
@@ -881,6 +899,31 @@ class World:
         m.box(X - 6.95, Y + 2.82, 2.37, X - 5.32, Y + 2.88, 2.43, (0.85, 0.86, 0.9, 1)); m.box(X - 5.38, Y + 1.06, 2.37, X - 5.32, Y + 2.88, 2.43, (0.85, 0.86, 0.9, 1))
         m.box(X - 6.4, Y + 1.7, 2.3, X - 5.9, Y + 2.2, 2.36, (0.8, 0.8, 0.85, 1)); m.box(X - 6.95, Y + 1.92, 1.6, X - 6.2, Y + 1.98, 2.33, (0.8, 0.8, 0.85, 1))
         self.shower_pos = (X - 6.15, Y + 1.95)
+        # v1.0.3 free roam: front door (inside), a laptop on the coffee table, collision + camera walls + interaction spots
+        m.box(X + 3.4, Y - 5.0, 0, X + 4.6, Y - 4.9, 2.25, (0.30, 0.19, 0.11, 1))                 # front door (inside)
+        m.box(X + 3.45, Y - 4.92, 0, X + 4.55, Y - 4.88, 2.2, (0.36, 0.23, 0.13, 1))
+        m.box(X + 4.35, Y - 4.9, 1.0, X + 4.45, Y - 4.82, 1.1, (0.85, 0.75, 0.4, 1))               # handle
+        m.box(X + 3.3, Y - 4.95, 2.3, X + 4.7, Y - 4.88, 2.38, (2.4, 0.5, 1.6, 1))                 # pink neon over the door
+        m.box(X + 1.0, Y + 0.80, 0.42, X + 1.6, Y + 1.15, 0.44, (0.15, 0.15, 0.17, 1))             # laptop base
+        m.quad((X + 1.0, Y + 1.15, 0.44), (X + 1.6, Y + 1.15, 0.44), (X + 1.6, Y + 1.22, 0.80), (X + 1.0, Y + 1.22, 0.80),
+               (0.4, 0.8, 1.6, 1), n=(0, -1, 0.2))                                                   # laptop screen (glows)
+        from fs_world import Grid as _G
+        hg = self.home_grid = _G(cell=4.0)
+        walls = [(X - 7.3, Y + 4.95, X + 7.3, Y + 5.4), (X - 7.3, Y - 5.4, X + 7.3, Y - 4.95), (X - 7.4, Y - 5.4, X - 6.95, Y + 5.4),
+                 (X + 6.95, Y - 5.4, X + 7.4, Y + 5.4), (X - 1.62, Y - 5.0, X - 1.43, Y + 1.5),                       # outer walls + bedroom partition
+                 (X - 7.0, Y + 0.98, X - 5.3, Y + 1.08), (X - 5.40, Y + 1.06, X - 5.30, Y + 2.85),                    # shower tile wall + glass
+                 (X + 5.3, Y - 4.65, X + 7.0, Y + 1.05), (X + 5.3, Y + 1.3, X + 7.0, Y + 2.3), (X - 4.3, Y - 5.0, X - 1.9, Y - 4.3)]   # kitchen, fridge, wardrobe
+        furn = [(X - 0.7, Y + 2.0, X + 3.2, Y + 3.0), (X + 0.4, Y + 0.6, X + 2.1, Y + 1.3), (X - 0.2, Y - 5.0, X + 2.7, Y - 4.5),
+                (X + 3.6, Y - 2.6, X + 4.6, Y - 0.6), (X + 3.25, Y - 2.45, X + 3.6, Y - 0.65), (X - 6.9, Y - 3.6, X - 4.6, Y - 0.6),
+                (X + 3.55, Y + 2.45, X + 3.75, Y + 2.65)]
+        for r in walls + furn: hg.add_rect(r, "b")
+        self.home_cam_rects = walls                       # tall things the camera must not pass through
+        self.home_bounds = (X - 6.85, Y - 4.85, X + 6.85, Y + 4.85)
+        # (id, label, x, y, radius)  - walk up to one and press E / click the button
+        self.home_spots = [("shower", "SHOWER", X - 6.1, Y + 2.3, 1.1), ("wardrobe", "WARDROBE", X - 3.1, Y - 3.7, 1.2),
+                           ("sleep", "SLEEP", X - 4.1, Y - 2.1, 1.1), ("save", "SAVE GAME", X + 1.3, Y + 0.25, 1.0),
+                           ("tv", "WATCH TV", X + 1.25, Y - 3.6, 1.2), ("eat", "EAT SNACK", X + 4.65, Y + 1.8, 1.0),
+                           ("leave", "LEAVE HOME", X + 4.0, Y - 4.25, 1.1)]
         self.home_int = m.node(); self.home_int.reparent_to(self.root); self.home_int.set_light_off()
         gl = MB("shower_glass")
         gl.quad((X - 5.35, Y + 1.06, 0.07), (X - 5.35, Y + 2.85, 0.07), (X - 5.35, Y + 2.85, 2.4), (X - 5.35, Y + 1.06, 2.4), (0.75, 0.9, 1.0, 0.16), n=(1, 0, 0))

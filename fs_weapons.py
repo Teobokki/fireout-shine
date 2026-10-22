@@ -121,11 +121,20 @@ class Arsenal:
     def refresh_held(self):
         me = self.g.me()
         if self.held is not None and self.held_for is me and getattr(self, "_held_id", None) == self.cur and me.in_car is None: return
-        if self.held is not None: self.held.remove_node(); self.held = None
+        if self.held is not None:
+            self.held.remove_node(); self.held = None
+            if getattr(self, "held_for", None) is not None:
+                self.held_for.arm_pose = None
+                if hasattr(self.held_for, "set_grip"): self.held_for.set_grip(False, False)
         if me.in_car is not None: return
         m = weapon_model(self.cur)
         if m is None: return
-        m.reparent_to(me.np); m.set_pos(0.24, 0.12, 0.92); m.set_p(70 if W[self.cur]["kind"] == "melee" else 0)
+        hand = getattr(me, "handR", None)
+        if hand is not None and not hand.is_empty():      # v1.0.3: the weapon sits in ANA / DANIEL's right hand
+            m.reparent_to(hand); m.set_pos(me.np, hand.get_pos(me.np))
+        else:
+            m.reparent_to(me.np); m.set_pos(0.24, 0.12, 0.92)
+        m.set_hpr(me.np, 0, 70 if W[self.cur]["kind"] == "melee" else 0, 0)
         m.set_light_off(); self.held = m; self.held_for = me; self._held_id = self.cur
 
     def open_wheel(self):
@@ -272,14 +281,34 @@ class Arsenal:
         from panda3d.core import MouseButton
         self.aiming = g.pcar is None and g.ride is None and not g.blocked() and (bool(g.vb.get("v_aim")) or (mw is not None and mw.is_button_down(MouseButton.three())))
         self.refresh_held()
-        if self.held is not None:
-            k = W[self.cur]["kind"]
+        me = g.me(); k = W[self.cur]["kind"]
+        in_hand = self.held is not None and self.held.get_parent().get_name() == "handR"
+        # arm poses (negative pitch = raised forward): guns/taser raised two-handed when aiming, lowered in the right hand otherwise;
+        # melee weapons are carried in the right hand and swung with the arm; fists punch with the right arm.
+        pose = None
+        if me.in_car is None:
             if self.swing > 0:
-                self.swing -= dt; ph = 1 - self.swing / (0.35 if self.cur != "pickaxe" else 0.6)
-                self.held.set_p(70 - 160 * math.sin(min(1, ph) * math.pi))
-            elif k == "melee": self.held.set_p(70)
-            elif self.aiming: self.held.set_pos(0.22, 0.45, 1.32); self.held.set_p(0)
-            else: self.held.set_pos(0.24, 0.12, 0.92); self.held.set_p(-60)
+                self.swing -= dt; ph = min(1.0, 1 - self.swing / (0.35 if self.cur != "pickaxe" else 0.6)); sp = math.sin(ph * math.pi)
+                pose = (-80 * sp, None, -70 + 60 * sp, None) if self.cur == "fists" else (-25 - 95 * sp, None, -30 + 20 * sp, None)
+                if self.held is not None: self.held.set_hpr(me.np, 0, 70 - 160 * sp, 0)
+            elif self.cur == "fists": pose = None
+            elif k == "melee":
+                pose = (-22, None, -45, None)
+                if self.held is not None: self.held.set_hpr(me.np, 0, 70, 0)
+            elif self.aiming:
+                pose = (-84, -66, 0, -28)
+                if self.held is not None: self.held.set_hpr(me.np, 0, 0, 0)
+            else:
+                pose = (-10, None, -22, None)
+                if self.held is not None: self.held.set_hpr(me.np, 0, -60, 0)
+        me.arm_pose = pose
+        if hasattr(me, "set_grip") and me.in_car is None:     # hands close around a held weapon, a punch is a fist, otherwise relaxed open fingers
+            gr = (self.held is not None or (self.cur == "fists" and self.swing > 0))
+            gl = self.held is not None and self.aiming and k != "melee"
+            if getattr(me, "grip", None) != (gr, gl): me.set_grip(gr, gl)
+        if self.held is not None and not in_hand:
+            if self.aiming: self.held.set_pos(0.22, 0.45, 1.32)
+            elif k != "melee": self.held.set_pos(0.24, 0.12, 0.92)
         for it in list(self.fx_items):
             it[1] -= dt
             if it[1] <= 0: it[0].remove_node(); self.fx_items.remove(it)
