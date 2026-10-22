@@ -67,3 +67,42 @@ def bar(parent, pos, w, h, frac, col=CYAN, bg=(0.1, 0.1, 0.15, 0.8)):
     fill = DirectFrame(parent=outer, frameColor=col, frameSize=(0, w, -h, h))
     fill.set_sx(max(0.001, frac))
     return outer, fill
+
+
+# ---- v1.0.4 Japanese line breaking (kinsoku shori) -------------------------------------------------------------
+NO_START = set("。、，．・：；？！ー\uff5e…‥」』）］｝〕〉》】ゝゞヽヾぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ々!?,.:;)]}'\"%")
+NO_END = set("「『（［｛〔〈《【([{")
+
+
+def _em(ch):
+    return 0.6 if ord(ch) < 0x2E80 else 1.0
+
+
+def jwrap(s, em=16.0):
+    """wrap a Japanese / mixed line into <= em-wide rows: break between any CJK characters (or at spaces for ASCII
+    words), but never start a row with closing punctuation / small kana (。、！？」 ...) or end one with an opening
+    bracket - the punctuation is pulled back onto the previous row instead (burasage)."""
+    out = []
+    for para in s.split("\n"):
+        # tokens: ASCII words stay whole, every CJK character is its own token
+        toks, buf = [], ""
+        for ch in para:
+            if ord(ch) < 0x2E80 and ch != " ": buf += ch
+            else:
+                if buf: toks.append(buf); buf = ""
+                toks.append(ch)
+        if buf: toks.append(buf)
+        rows, cur, w = [], "", 0.0
+        for t in toks:
+            tw = sum(_em(c) for c in t)
+            if cur and w + tw > em and t != " " and t[0] not in NO_START:
+                cut = max(cur.rfind(q) for q in "、。！？」 ")
+                if cut >= len(cur) * 0.55 and cut < len(cur) - 1:      # nicer: break right after punctuation / a space
+                    rows.append(cur[:cut + 1].rstrip()); cur = cur[cut + 1:].lstrip(); w = sum(_em(c) for c in cur)
+                elif cur[-1] in NO_END: rows.append(cur[:-1]); cur, w = cur[-1], _em(cur[-1])
+                else: rows.append(cur.rstrip()); cur, w = "", 0.0
+                if t == " ": continue
+            cur += t; w += tw
+        if cur: rows.append(cur.rstrip())
+        out.append("\n".join(r.lstrip() for r in rows))
+    return "\n".join(out)

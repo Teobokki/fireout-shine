@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -50,7 +50,7 @@ if os.path.exists(_icon):
     loadPrcFileData("", "icon-filename " + Filename.from_os_specific(_icon).get_fullpath())
 
 from direct.showbase.ShowBase import ShowBase
-from direct.gui.DirectGui import DirectFrame, DirectSlider, DGG
+from direct.gui.DirectGui import DirectFrame, DirectSlider, DirectButton, DGG
 from direct.gui.OnscreenImage import OnscreenImage
 from direct.gui import DirectGuiGlobals
 from panda3d.core import (TextNode, TransparencyAttrib, WindowProperties, PTA_LVecBase3f, Texture, PNMImage, SamplerState,
@@ -92,7 +92,7 @@ def check_update():
     return "latest", "You have the latest version (%s)." % APP_VERSION
 
 
-DEFAULT_SETTINGS = {"tod": "cycle", "master": 0.9, "sfx_volume": 0.8, "music_volume": 0.55, "voice_volume": 0.9, "quality": 1, "rain": False,
+DEFAULT_SETTINGS = {"traffic": "high", "tod": "cycle", "master": 0.9, "sfx_volume": 0.8, "music_volume": 0.55, "voice_volume": 0.9, "quality": 1, "rain": False,
                     "buttons": True, "chatter": True, "subtitles": True, "fullscreen": False}
 CREDITS = [
     ("FIREOUT SHINE  /  ファイアアウト・シャイン", None),
@@ -180,6 +180,8 @@ class App(ShowBase):
         self.show_splash()
         if os.environ.get("FS_SMOKE") == "money":          # built-in release smoke test (works in the frozen exe; runs a fixed sequence only)
             self.do_method_later(1.0, self._smoke_money, "fs-smoke")
+        if os.environ.get("FS_SMOKE") == "v104":           # v1.0.4 release smoke test: taxi voice, laptop, food, MIYOYAZU
+            self.do_method_later(1.0, self._smoke_v104, "fs-smoke")
         ts = os.environ.get("FS_TESTSCRIPT")
         if ts and not getattr(sys, "frozen", False):
             self.do_method_later(float(os.environ.get("FS_TESTDELAY", "1")),
@@ -231,6 +233,7 @@ class App(ShowBase):
             px, py = game.player_pos()
             d = min(math.hypot(p.x - px, p.y - py) for p in game.police)
             siren = max(0.0, 1.0 - d / 140.0) * (1.0 if game.heat else 0.0)
+        if getattr(game, "tsunami", None) is not None and not game.tsunami.drain: siren = 1.0       # v1.0.4 tsunami warning siren
         if "siren" in L: L["siren"].set_volume(sv * 0.4 * siren)
         if "rain" in L: L["rain"].set_volume(sv * 0.5 if (game and getattr(game, "home", None) and game.home.get("mode") == "shower") else (sv * 0.35 if self.settings.get("rain") and game and not paused else 0))
         for s in L.values():
@@ -278,20 +281,12 @@ class App(ShowBase):
             self._bloom_day = dayb; self.apply_quality()
 
     def apply_quality(self):
-        q = int(self.settings.get("quality", 1))
+        # v1.0.4: no bloom / glow post-processing at any quality level (it made walls, sky, skin and legs bleed light)
         try:
-            if self.filters is None and q >= 1:
-                from direct.filter.CommonFilters import CommonFilters
-                self.filters = CommonFilters(self.win, self.cam)
-            if self.filters is not None:
-                if q >= 1:
-                    dayb = getattr(self, "_bloom_day", False)
-                    self.filters.set_bloom(blend=(0.3, 0.4, 0.3, 0.0), mintrigger=0.8 if dayb else 0.55, maxtrigger=1.0, desat=0.1,
-                                           intensity=(0.35 if dayb else 1.0) * (0.9 if q == 1 else 1.25), size="medium" if q == 1 else "large")
-                else:
-                    self.filters.del_bloom()
+            if getattr(self, "filters", None) is not None:
+                self.filters.del_bloom()
         except Exception as e:
-            log_error("bloom: %r" % e); self.filters = None
+            log_error("bloom off: %r" % e)
         self.rain_on(bool(self.settings.get("rain")))
 
     def rain_on(self, on):
@@ -537,6 +532,49 @@ class App(ShowBase):
         self.camLens.set_fov(70); self.flyover = True
         self.show_menu()
 
+    def _smoke_v104(self, task):
+        out = os.environ.get("FS_SMOKE_OUT", os.path.join(BASE, "docs"))
+        log = open(os.path.join(out, "smoke_v104.log"), "a", encoding="utf-8")
+        def L(*a): log.write(" ".join(str(x) for x in a) + "\n"); log.flush()
+        def shot(n):
+            self.graphicsEngine.render_frame(); self.graphicsEngine.render_frame()
+            self.win.save_screenshot(Filename.from_os_specific(os.path.join(out, n + ".png"))); L("shot", n)
+        def taxi():
+            g = self.game; me = g.me(); c = g.spawn_car("taxi", me.x - 4, me.y, me.h, role="taxi"); c.driver = "ai"; g.taxi = c
+            from fs_ai import ResponderAI
+            c.ai = ResponderAI(g, c, (me.x, me.y)); c.ai.arrived = True; g.board_taxi()
+            L("taxi driver", getattr(c, "taxi_driver", None) is not None, "ride", bool(g.ride))
+        def voices():
+            vs = sorted(f for f in os.listdir(os.path.join(BASE, "assets", "voice")) if f.startswith("taxi_en_"))
+            L("taxi voice files", len(vs), vs[:3])
+            for f in vs[:3]:
+                self.voice(f, 0.01); snd = self._voices.get(f)
+                L("loaded", f, snd is not None, "length %.2fs" % (snd.length() if snd is not None else -1), "status", snd.status() if snd is not None else None)
+        def laptop():
+            g = self.game; g.ride and g.leave_taxi(); r = g.laptop.toggle(); L("laptop opening", g.laptop.phase)
+        steps = [
+            (7.0, lambda: (self.show_title(), )), (1.0, self.show_menu), (1.0, lambda: self.start_game(None)),
+            (10.0, lambda: setattr(self.game, "intro_t", 0.01)), (1.0, taxi), (3.0, lambda: shot("smoke_taxi_fp")), (0.5, voices),
+            (1.0, laptop), (6.0, lambda: (L("laptop ui up", self.game.laptop.ui is not None), shot("smoke_laptop"))), (0.5, lambda: self.game.laptop.close()),
+            (0.5, lambda: L("eat", self.game.eat_food("onigiri"))), (6.0, lambda: L("eating done", self.game.eating is None)),
+            (0.5, lambda: (self.game.select_char("miyo"), L("active", self.game.active))), (1.0, lambda: shot("smoke_miyo")),
+            (0.5, lambda: self.game.miyo.start_build("pagoda")), (3.5, lambda: (L("build", [(i["label"], len(i["cols"])) for i in self.game.builds.items]), shot("smoke_build_pagoda"))),
+            (0.5, lambda: (self.game.miyo.clear(), self.game.miyo.start_build("cat"))), (3.5, lambda: (L("build", [(i["label"], len(i["cols"])) for i in self.game.builds.items]), shot("smoke_build_cat"))),
+            (0.5, lambda: (L("SMOKE OK"), self.userExit())),
+        ]
+        st = {"i": 0, "t": 0.0}
+        def run(t):
+            try:
+                if self.world is None and st["i"] > 2: return t.cont
+                st["t"] += globalClock.get_dt()
+                if st["i"] < len(steps) and st["t"] >= steps[st["i"]][0]:
+                    st["t"] = 0.0; f = steps[st["i"]][1]; st["i"] += 1; f()
+            except Exception:
+                import traceback; L("SMOKE ERROR", traceback.format_exc()); st["i"] += 1
+            return t.cont
+        self.task_mgr.add(run, "smoke-v104")
+        return task.done
+
     def _smoke_money(self, task):
         out = os.environ.get("FS_SMOKE_OUT", os.path.join(BASE, "docs"))
         log = open(os.path.join(out, "smoke_money.log"), "a", encoding="utf-8")
@@ -579,15 +617,92 @@ class App(ShowBase):
         if not self.game or self.pause_ui: return
         g = self.game; g.paused = True
         o = self.pause_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.6), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
-        U.panel(o, -0.45, 0.45, -0.72, 0.72)
+        U.panel(o, -0.45, 0.45, -0.80, 0.72)
         U.text(o, "PAUSED", (0, 0.58), 0.08, fg=U.PINK); U.text(o, "一時停止", (0, 0.5), 0.04, fg=U.CYAN, font=self.jpfont)
-        items = (("RESUME", self.hide_pause), ("ADD MONEY", self.show_add_money), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
+        items = (("RESUME", self.hide_pause), ("ADD MONEY", self.show_add_money), ("CLOTHING", self.show_clothing), ("FOOD", self.show_food), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
                  ("RESET CAR DAMAGE", lambda: (self.hide_pause(), g.repair_car())),
                  ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls), ("PROFILE", self.show_profile),
                  ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
         for i, (t, c) in enumerate(items):
-            U.button(o, t, (0, 0.43 - i * 0.118), c, w=0.33, h=0.05, scale=0.04, edge=(0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else U.PINK)
+            U.button(o, t, (0, 0.43 - i * 0.12), c, w=0.33, h=0.05, scale=0.04,
+                     edge=(0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if t == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if t == "FOOD" else U.PINK)))
         self.accept("escape", self.hide_pause)
+
+    def show_food(self):
+        """v1.0.4 FOOD: buy something to eat or drink anywhere on foot; picking one closes the menu and plays the animated eat"""
+        g = self.game
+        if not g or getattr(self, "money_ui", None): return
+        from fs_food import FOODS
+        yl = (1.0, 0.75, 0.2, 1)
+        o = self.money_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.45), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
+        o.set_bin("gui-popup", 70)
+        if self.pause_ui: self.pause_ui.hide()
+        U.panel(o, -1.2, 1.2, -0.8, 0.8, edge=yl)
+        U.text(o, "FOOD", (0, 0.68), 0.07, fg=yl); U.text(o, "食べ物・飲み物", (0, 0.615), 0.036, fg=U.CYAN, font=self.jpfont)
+        block = g.food_block()
+        msg = U.text(o, (block + "  -  you can still look") if block else "Cash ¥%s  -  pick something to eat or drink" % format(g.cash, ","),
+                     (0, -0.62), 0.032, fg=(1.0, 0.5, 0.45, 1) if block else (0.85, 0.9, 1, 1), font=U.FONT_PLAIN)
+        def close():
+            if self.money_ui: self.money_ui.destroy(); self.money_ui = None
+            self.accept("escape", self.hide_pause)
+            if self.pause_ui: self.pause_ui.show()
+        def pick(fid):
+            b = g.food_block()
+            if b: msg.setText(b); msg["fg"] = (1.0, 0.5, 0.45, 1); self.sfx("empty", 0.6); return
+            f = [x for x in FOODS if x[0] == fid][0]
+            if g.cash < f[3]: msg.setText("Not enough cash for %s (¥%d)" % (f[2], f[3])); msg["fg"] = (1.0, 0.5, 0.45, 1); self.sfx("empty", 0.6); return
+            self.hide_pause(); g.eat_food(fid)
+        for k, (fid, ja, en, price, hp, kind, _) in enumerate(FOODS):
+            cx = -0.9 + (k % 4) * 0.6; cy = 0.40 - (k // 4) * 0.36
+            col = (0.08, 0.12, 0.22, 0.95) if kind == "drink" else (0.16, 0.08, 0.16, 0.95)
+            fr = DirectButton(parent=o, frameColor=col, frameSize=(-0.27, 0.27, -0.16, 0.16), pos=(cx, 0, cy), relief=DGG.FLAT,
+                              command=pick, extraArgs=[fid], pressEffect=1)
+            DirectFrame(parent=fr, frameColor=(0.3, 0.3, 0.4, 1) if kind != "drink" else (0.3, 0.6, 1.0, 1), frameSize=(-0.27, 0.27, -0.165, -0.16))
+            try: self._img(fr, "tex/food_%s.png" % fid, pos=(-0.15, 0.0), scale=(0.11, 0.11))
+            except Exception: pass
+            U.text(fr, ja, (0.09, 0.06), 0.040, fg=(1, 1, 1, 1), font=self.jpfont)
+            U.text(fr, en, (0.09, -0.01), 0.030, fg=yl if kind != "drink" else U.CYAN, font=U.FONT_PLAIN)
+            U.text(fr, "¥%d  ·  +%d HP" % (price, hp), (0.09, -0.08), 0.026, fg=(0.8, 0.85, 0.9, 1), font=U.FONT_PLAIN)
+            if fid == "water": U.text(fr, "sobers you up", (0.09, -0.125), 0.02, fg=(0.6, 0.85, 1, 1), font=U.FONT_PLAIN)
+        U.button(o, "BACK", (0, -0.72), close, w=0.2, h=0.045, scale=0.04, hint="Esc")
+        self.accept("escape", close); o.close = close; o.pick = pick
+
+    def show_clothing(self):
+        """v1.0.4 CLOTHING: change the active character's outfit anywhere (same outfit list + logic as the house wardrobe)"""
+        g = self.game
+        if not g or getattr(self, "money_ui", None): return
+        who = g.active; pk = (1.0, 0.55, 0.85, 1)
+        o = self.money_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.35), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
+        o.set_bin("gui-popup", 70)
+        if self.pause_ui: self.pause_ui.hide()          # keep your character in view while you change
+        U.panel(o, 0.5, 1.3, -0.66, 0.66, edge=pk)
+        U.text(o, "CLOTHING", (0.9, 0.54), 0.065, fg=pk)
+        from fs_game import NAMES
+        U.text(o, NAMES[who], (0.9, 0.47), 0.034, font=U.FONT_PLAIN)
+        block = g.outfit_block()
+        msg = U.text(o, block or "", (0.9, -0.42), 0.03, fg=(1.0, 0.5, 0.45, 1) if block else (0.3, 1.0, 0.45, 1), font=U.FONT_PLAIN, wrap=22)
+        def build():
+            for b in getattr(o, "btns", []): b.destroy()
+            o.btns = []; cur = g.chars[who].outfit
+            for k, (oid, nm, desc) in enumerate(g.outfit_list(who)):
+                on = oid == cur
+                b = U.button(o, nm, (0.9, 0.33 - k * 0.15), pick, w=0.33, h=0.05, scale=0.036, extra=[oid],
+                             edge=pk if on else (0.5, 0.5, 0.6, 1), col=(0.35, 0.10, 0.30, 0.95) if on else (0.10, 0.06, 0.18, 0.92), font=None)
+                o.btns.append(b)
+                o.btns.append(U.text(o, desc + ("  (wearing)" if on else ""), (0.9, 0.33 - k * 0.15 - 0.075), 0.025, fg=(0.85, 0.85, 0.9, 1) if not on else pk,
+                                     font=U.FONT_PLAIN, wrap=30))
+        def pick(oid):
+            b_ = g.outfit_block()
+            if b_: msg.setText(b_); msg["fg"] = (1.0, 0.5, 0.45, 1); self.sfx("empty", 0.6); return
+            if g.apply_outfit(who, oid):
+                msg.setText("Now wearing: %s" % dict((i, n) for i, n, _ in g.outfit_list(who))[oid]); msg["fg"] = (0.3, 1.0, 0.45, 1)
+            build()
+        build()
+        def close():
+            self.money_ui.destroy(); self.money_ui = None; self.accept("escape", self.hide_pause)
+            if self.pause_ui: self.pause_ui.show()
+        U.button(o, "BACK", (0.9, -0.56), close, w=0.2, h=0.045, scale=0.04, hint="Esc")
+        self.accept("escape", close); o.close = close; o.pick = pick
 
     def show_add_money(self):
         """ADD MONEY panel: type an amount or use the quick buttons; total cash is capped at 100,000,000,000."""
@@ -645,13 +760,13 @@ class App(ShowBase):
         U.text(o, "CONTROLS", (0, 0.68), 0.07, fg=U.PINK)
         rows = [("W / S  or  Arrows", "Accelerate / brake & reverse  (walk on foot)"), ("A / D  or  Arrows", "Steer"),
                 ("Space", "Handbrake (drift)"), ("Shift", "Nitro  /  run on foot"), ("F", "Enter / exit / take any car, ride a taxi"),
-                ("Q", "Switch ANA <-> DANIEL"), ("Tab (hold) / wheel", "Weapon wheel / cycle weapons"),
+                ("Q", "Switch ANA / DANIEL / MIYOYAZU"), ("B / N", "MIYOYAZU: BUILD / TSUNAMI  (N again: STOP TSUNAMI)"), ("Tab (hold) / wheel", "Weapon wheel / cycle weapons"),
                 ("Right / Left mouse", "Aim (over-shoulder) / attack"), ("T  or  Up (on foot)", "Phone (EX IX G9)"), ("E", "Start event / enter FRGARAGE"),
                 ("C", "Camera"), ("R", "Reset car"), ("H", "Horn"), ("M", "Map (click to set a waypoint)"), ("Esc", "Menu"),
                 ("Gamepad", "Triggers drive, left stick steers, A enter/exit, RB handbrake")]
         for k, (a, b) in enumerate(rows):
-            U.text(o, a, (-0.3, 0.58 - k * 0.075), 0.033, fg=U.CYAN, align=TextNode.A_right)
-            U.text(o, b, (-0.25, 0.58 - k * 0.075), 0.032, align=TextNode.A_left, font=U.FONT_PLAIN)
+            U.text(o, a, (-0.3, 0.58 - k * 0.07), 0.033, fg=U.CYAN, align=TextNode.A_right)
+            U.text(o, b, (-0.25, 0.58 - k * 0.07), 0.032, align=TextNode.A_left, font=U.FONT_PLAIN)
         U.button(o, "BACK", (0, -0.72), o.destroy, w=0.2, h=0.045, scale=0.04)
 
     def show_profile(self):
@@ -659,12 +774,12 @@ class App(ShowBase):
         o = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.8), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
         U.panel(o, -0.9, 0.9, -0.7, 0.7)
         U.text(o, "PROFILE", (0, 0.58), 0.07, fg=U.PINK)
-        for k, w in enumerate(("ana", "daniel")):
-            x = -0.45 + k * 0.9
-            try: self._img(o, "tex/portrait_%s.png" % w, pos=(x, 0.3), scale=(0.17, 0.17))
+        for k, w in enumerate(("ana", "daniel", "miyo")):
+            x = -0.58 + k * 0.58
+            try: self._img(o, "tex/portrait_%s.png" % w, pos=(x, 0.3), scale=(0.15, 0.15))
             except Exception: pass
-            U.text(o, ("ANA  アナ" if w == "ana" else "DANIEL") + ("  (active)" if g.active == w else ""), (x, 0.06), 0.042,
-                   fg=(0.4, 0.7, 1, 1) if w == "ana" else (0.5, 1, 0.4, 1), font=self.jpfont)
+            U.text(o, {"ana": "ANA  アナ", "daniel": "DANIEL", "miyo": "MIYOYAZU"}[w] + ("  (active)" if g.active == w else ""), (x, 0.08), 0.036,
+                   fg={"ana": (0.4, 0.7, 1, 1), "daniel": (0.5, 1, 0.4, 1), "miyo": (1, 0.6, 0.15, 1)}[w], font=self.jpfont)
         lines = ["Cash  ¥%s" % format(g.cash, ","), "Neon tokens  %d / %d" % (len(g.tokens), len(D.TOKENS))]
         for k_, v in g.best.items():
             lines.append("Best %s  %s" % (k_.upper(), g.fmt(v) if isinstance(v, float) else v))
@@ -702,11 +817,12 @@ class App(ShowBase):
         cyc("Subtitles", "subtitles", onoff, -0.25)
         cyc("Fullscreen", "fullscreen", onoff, -0.35, self.apply_fullscreen)
         cyc("Time of day", "tod", [("cycle", "DAY/NIGHT CYCLE"), ("day", "LOCK DAY"), ("night", "LOCK NIGHT")], -0.45)
-        U.text(o, "Graphics quality changes the amount of traffic, pedestrians and bloom.", (0, -0.55), 0.03, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.6))
+        cyc("Traffic density", "traffic", [("low", "LOW"), ("normal", "NORMAL"), ("high", "HIGH")], -0.55)
+        U.text(o, "Graphics quality + traffic density change the amount of cars and pedestrians.", (0, -0.62), 0.026, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.6))
         def done():
             self.save_settings(); o.destroy()
             if back: back()
-        U.button(o, "DONE", (0, -0.7), done, w=0.2, h=0.05, scale=0.042, edge=U.CYAN)
+        U.button(o, "DONE", (0, -0.75), done, w=0.2, h=0.05, scale=0.042, edge=U.CYAN)
 
     # ---------------------------------------------------------------- dialogs / updates
     def _dialog(self, msg, buttons):

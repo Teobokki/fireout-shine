@@ -921,10 +921,10 @@ class World:
         self.home_bounds = (X - 6.85, Y - 4.85, X + 6.85, Y + 4.85)
         # (id, label, x, y, radius)  - walk up to one and press E / click the button
         self.home_spots = [("shower", "SHOWER", X - 6.1, Y + 2.3, 1.1), ("wardrobe", "WARDROBE", X - 3.1, Y - 3.7, 1.2),
-                           ("sleep", "SLEEP", X - 4.1, Y - 2.1, 1.1), ("save", "SAVE GAME", X + 1.3, Y + 0.25, 1.0),
+                           ("sleep", "SLEEP", X - 4.1, Y - 2.1, 1.1), ("save", "SAVE GAME", X + 0.75, Y + 0.25, 0.7), ("laptop", "USE LAPTOP", X + 1.75, Y + 0.25, 0.7),
                            ("tv", "WATCH TV", X + 1.25, Y - 3.6, 1.2), ("eat", "EAT SNACK", X + 4.65, Y + 1.8, 1.0),
                            ("leave", "LEAVE HOME", X + 4.0, Y - 4.25, 1.1)]
-        self.home_int = m.node(); self.home_int.reparent_to(self.root); self.home_int.set_light_off()
+        self.home_int = m.node(); self.home_int.reparent_to(self.root); self.home_int.set_light_off(); self.home_int.set_color_scale(0.92, 0.92, 0.92, 1)   # v1.0.4: no washed-out walls
         gl = MB("shower_glass")
         gl.quad((X - 5.35, Y + 1.06, 0.07), (X - 5.35, Y + 2.85, 0.07), (X - 5.35, Y + 2.85, 2.4), (X - 5.35, Y + 1.06, 2.4), (0.75, 0.9, 1.0, 0.16), n=(1, 0, 0))
         g2 = gl.node(); g2.reparent_to(self.home_int); g2.set_transparency(TransparencyAttrib.M_alpha); g2.set_two_sided(True); g2.set_depth_write(False); g2.set_bin("transparent", 20)
@@ -968,7 +968,7 @@ class World:
     def flush(self):
         texmap = {"asphalt": "asphalt.png", "sidewalk": "sidewalk.png", "facade0": "facade0.png", "facade1": "facade1.png",
                   "facade2": "facade2.png", "facade3": "facade3.png", "facade4": "facade4.png", "facade5": "facade5.png", "facade6": "facade6.png", "shopfront": "shopfront.png", "signs": "signs.png", "flag": "flag.jpg"}
-        self.fac_nodes = []; self.emit_nodes = []; self.ground_np = None
+        self.fac_nodes = []; self.emit_nodes = []; self.ground_np = None; self.shop_nps = []
         self.static = self.root.attach_new_node("static")
         self.static.set_light_off()
         ground = self.root.attach_new_node("ground")
@@ -992,6 +992,7 @@ class World:
                 np_.set_two_sided(mat in ("signs", "flag"))
             if mat.startswith("facade"): self.fac_nodes.append((np_, mat))
             if mat in ("signs", "emit"): self.emit_nodes.append(np_)
+            if mat == "shopfront": self.shop_nps.append(np_)
             if mat == "flag":
                 np_.set_texture(self.T("flag.jpg", repeat=False))
         # reflections (mirrored world under the translucent asphalt)
@@ -1014,7 +1015,7 @@ class World:
                 np_.set_texture(self.T("glow.png", repeat=False)); np_.set_light_off()
                 np_.set_attrib(ColorBlendAttrib.make(ColorBlendAttrib.M_add, ColorBlendAttrib.O_incoming_alpha, ColorBlendAttrib.O_one))
                 np_.set_depth_write(False); np_.set_bin("fixed", 10); np_.set_two_sided(True)
-                if nm == "_glow" and self.q >= 2:
+                if False and nm == "_glow" and self.q >= 2:     # v1.0.4: no mirrored halos either
                     m = np_.copy_to(self.refl); m.set_sz(-1); m.set_color_scale(0.5, 0.5, 0.5, 1)
         # the sea: dark water with a moving shimmer
         self.sea.set_texture(self.T("asphalt.png")); self.sea.set_color_scale(0.12, 0.2, 0.35, 1); self.sea.set_light_off()
@@ -1073,18 +1074,23 @@ class World:
             self._dayfac = day
             for np_, mat in self.fac_nodes:
                 np_.set_texture(self.T(mat + ("_day" if day else "") + ".png", repeat=True), 1)
-        b = 1.0 + 0.9 * k
+        b = 1.0 + 0.45 * k          # v1.0.4: daylight no longer over-brightens walls / shopfronts to white
         for np_, mat in self.fac_nodes:
             f_ = (1.0 if day else 1.0 + 0.4 * k) / b; np_.set_color_scale(f_, f_, f_, 1)
         self.static.set_color_scale(b, b * (1 - 0.08 * warm), b * (1 - 0.2 * warm), 1)
         for np_ in self.emit_nodes:
-            e = 1.0 - 0.45 * k; np_.set_color_scale(e / b, e / b, e / b, 1)
+            e = (1.0 - 0.45 * k) * (1.0 - 0.3 * k); np_.set_color_scale(e / b, e / b, e / b, 1)    # signs: plain emissive, dimmer by day
+        for sn in getattr(self, "shop_nps", []):
+            sh = 0.86 / b; sn.set_color_scale(sh, sh, sh, 1)          # v1.0.4: lit shop windows no longer blow out to white
         if self.ground_np is not None:
-            g = 1.0 + 1.3 * k; self.ground_np.set_color_scale(g, g * (1 - 0.05 * warm), g * (1 - 0.12 * warm) * (1 + 0.05 * k), 1)
+            g = 1.0 + 0.9 * k; self.ground_np.set_color_scale(g, g * (1 - 0.05 * warm), g * (1 - 0.12 * warm) * (1 + 0.05 * k), 1)
         if getattr(self, "refl", None) is not None:
             r_ = 0.85 * (1 - 0.6 * k); self.refl.set_color_scale(r_, r_ * 0.95, r_ * 1.1, 1)
         if getattr(self, "glow_nodes", None):
-            for gn in self.glow_nodes: gn.set_alpha_scale(1.0 - 0.85 * k); gn.set_color_scale(1, 1, 1, 1.0 - 0.85 * k)
+            for gn in self.glow_nodes:     # v1.0.4: halo sprites are off; ground light pools stay subtle and only at night
+                a_ = (1.0 - k) * (0.0 if gn.get_name() == "glows" else 0.45); gn.set_alpha_scale(a_); gn.set_color_scale(1, 1, 1, a_)
+                if a_ <= 0.01: gn.hide()
+                else: gn.show()
         if self.sea:
             self.sea.set_color_scale(0.12 + 0.0 * k, 0.2 + 0.32 * k, 0.35 + 0.33 * k, 1)
             self.shallow.set_color_scale(0.25 + 0.75 * k, 0.3 + 0.7 * k, 0.4 + 0.6 * k, 1)

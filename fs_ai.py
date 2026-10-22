@@ -101,11 +101,20 @@ class TrafficAI:
         ts = self.speed if (ang < 30 or dist > 30) else 7.0
         # keep distance from whatever is ahead (cars, the player on foot)
         f = c.fwd
+        sig = getattr(self.g, "signals", None)
+        if sig is not None:                      # v1.0.4: stop at the line on red
+            st = sig.must_stop(c)
+            if st is not None: ts = min(ts, max(0.0, st * 0.8))
+        self.block = getattr(self, "block", 0.0)
         for o in self.g.cars_near(c.x, c.y, 18):
             if o is c: continue
             dx, dy = o.x - c.x, o.y - c.y; fwd = dx * f[0] + dy * f[1]; lat = abs(dx * f[1] - dy * f[0])
-            if 0 < fwd < 16 and lat < 2.6:
-                ts = min(ts, max(0.0, (fwd - 7.0) * 1.2))
+            of = o.fwd; same = of[0] * f[0] + of[1] * f[1] > 0.5
+            if same:
+                if 0 < fwd < 16 and lat < 2.6: ts = min(ts, max(0.0, (fwd - 7.0) * 1.2))
+            elif 0 < fwd < 9 and lat < 2.2 and self.block < 3.0:     # crossing car right in front: brief yield, never gridlock
+                ts = min(ts, max(0.0, (fwd - 5.0) * 1.0))
+        self.block = self.block + dt if ts < 0.5 and c.fspeed() < 0.5 else max(0.0, self.block - dt * 2)
         for p in self.g.walkers():
             dx, dy = p.x - c.x, p.y - c.y; fwd = dx * f[0] + dy * f[1]; lat = abs(dx * f[1] - dy * f[0])
             if 0 < fwd < 14 and lat < 2.2:
@@ -189,8 +198,9 @@ class ResponderAI:
         if t is None:
             self.arrived = True; return
         ang, dist = self.pf.corner_ahead(c)
-        ts = (30.0 if self.fast else 14.0)
-        if ang > 35 and dist < 40: ts = 13.0
+        mul = getattr(self, "mul", 1.0)           # v1.0.4: the JP TAXI driver drives ~1.4x too fast and cuts corners
+        ts = (30.0 if self.fast else 14.0) * mul
+        if ang > 35 and dist < 40: ts = 13.0 * (1.0 + (mul - 1.0) * 0.6)
         if self.pf.i >= len(self.pf.pts) - 1:
             ts = min(ts, max(3.0, dist * 0.5))
             if dist < 6: self.arrived = True
@@ -199,5 +209,6 @@ class ResponderAI:
         for o in self.g.cars_near(c.x, c.y, 14):
             if o is c: continue
             dx, dy = o.x - c.x, o.y - c.y; fw = dx * f[0] + dy * f[1]; lat = abs(dx * f[1] - dy * f[0])
-            if 0 < fw < 12 and lat < 2.4: ts = min(ts, 4.0)
+            if 0 < fw < 12 and lat < 2.4: ts = min(ts, 4.0 if mul <= 1.0 else 9.0)
         steer_to(c, t[0], t[1], ts)
+        if mul > 1.0: c.steer = max(-1.0, min(1.0, c.steer + 0.12 * math.sin(self.t * 1.7)))      # a bit distracted: weaves

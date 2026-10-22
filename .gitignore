@@ -7,3 +7,4 @@ dist_onefile/
 assets/models/*.glb
 *.blend1
 reference/
+docs/_*.png

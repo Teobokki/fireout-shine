@@ -539,6 +539,614 @@
    "district": "beach",
    "text": "サンダルの中、砂だらけ。",
    "en": "My sandals are full of sand."
+  },
+  {
+   "file": "ja_26.wav",
+   "district": "*",
+   "text": "早めの会議に遅刻しそう。",
+   "en": "I'm late for my early meeting."
+  },
+  {
+   "file": "ja_27.wav",
+   "district": "*",
+   "text": "もっと効率よく眺めるために、新しいスマホを買ったんだ。",
+   "en": "I bought a new phone so I could stare at it more efficiently."
+  },
+  {
+   "file": "ja_28.wav",
+   "district": "*",
+   "text": "ダイエット中なの。食べるのは暗闇で光るお菓子だけ。",
+   "en": "I'm on a diet. Only snacks that glow in the dark."
+  },
+  {
+   "file": "ja_29.wav",
+   "district": "*",
+   "text": "スマートウォッチに「リラックスして」って言われた。逆に緊張する。",
+   "en": "My smart watch told me to relax. Now I'm stressed about relaxing."
+  },
+  {
+   "file": "ja_30.wav",
+   "district": "*",
+   "text": "外の空気を吸いに来たのに、ほとんどネオンだよ。",
+   "en": "I came out for fresh air. It's mostly neon."
+  },
+  {
+   "file": "ja_31.wav",
+   "district": "*",
+   "text": "目覚ましを十個かけたら、普通に起きられた。不思議。",
+   "en": "I set ten alarms and still woke up on time. Weird."
+  },
+  {
+   "file": "ja_32.wav",
+   "district": "*",
+   "text": "おしゃれに遅刻したいから、ゆっくり歩いてるの。",
+   "en": "I'm walking slowly so I can be late in style."
+  },
+  {
+   "file": "ja_33.wav",
+   "district": "*",
+   "text": "早く寝ようとしたけど、街が許してくれなかった。",
+   "en": "I tried to go to bed early. The city said no."
+  },
+  {
+   "file": "ja_34.wav",
+   "district": "*",
+   "text": "うちの猫、私よりフォロワーが多いんだよね。",
+   "en": "My cat has more followers than I do."
+  },
+  {
+   "file": "ja_35.wav",
+   "district": "*",
+   "text": "ウィンドウショッピングで節約中。全部の店でね。",
+   "en": "I'm saving money by window shopping. Every single window."
+  },
+  {
+   "file": "ja_36.wav",
+   "district": "*",
+   "text": "迷子じゃないよ。自信満々で探検中。",
+   "en": "I'm not lost. I'm exploring very confidently."
+  },
+  {
+   "file": "ja_37.wav",
+   "district": "*",
+   "text": "いい車だね。僕のは夢を乗せた自転車だよ。",
+   "en": "Nice car. Mine is a bicycle with dreams."
+  },
+  {
+   "file": "ja_38.wav",
+   "district": "*",
+   "text": "今の見た？僕も見えなかった。速すぎて。",
+   "en": "Did you see that? Me neither, it was too fast."
+  },
+  {
+   "file": "ja_39.wav",
+   "district": "*",
+   "text": "この横断歩道が、私の有酸素運動。",
+   "en": "This crosswalk is my cardio."
+  },
+  {
+   "file": "ja_40.wav",
+   "district": "*",
+   "text": "運転、気をつけて！この靴、買ったばかりなんだ。",
+   "en": "Careful driving! I just got these shoes."
+  },
+  {
+   "file": "ja_41.wav",
+   "district": "*",
+   "text": "インフルエンサーやってます。影響してるのは主にハトだけど。",
+   "en": "I'm an influencer. I influence pigeons, mostly."
+  },
+  {
+   "file": "ja_42.wav",
+   "district": "*",
+   "text": "あれってアナさん？ニュースより速く走るって聞いたよ。",
+   "en": "Is that Ana? I heard she drives faster than the news."
+  },
+  {
+   "file": "ja_43.wav",
+   "district": "*",
+   "text": "渋滞ってひどいよね。でも好き。クラクションが鳴るパレードみたい。",
+   "en": "Traffic is terrible. I love it. It's like a parade that honks."
+  },
+  {
+   "file": "ja_44.wav",
+   "district": "*",
+   "text": "あ、ミヨヤズさんだ！ヘルメット、似合ってるね。",
+   "en": "Oh, it's Miyoyazu! The hard hat suits you."
+  },
+  {
+   "file": "ja_45.wav",
+   "district": "*",
+   "text": "ダニエルさん、そのシャツ派手だね。いい意味で。",
+   "en": "Daniel, that shirt is loud. In a good way."
+  },
+  {
+   "file": "ja_46.wav",
+   "district": "*",
+   "text": "すみません、駅はどっちですか？あ、大丈夫です。地図ありました。",
+   "en": "Excuse me, which way is the station? Oh, never mind. I have a map."
+  },
+  {
+   "file": "ja_47.wav",
+   "district": "crossing",
+   "text": "友達とここで待ち合わせ。みんな同じこと考えてるけど。",
+   "en": "I'm meeting a friend here. So is everyone else."
+  },
+  {
+   "file": "ja_48.wav",
+   "district": "crossing",
+   "text": "お昼からずっと青信号を待ってる気がする。",
+   "en": "I feel like I've been waiting for the green light since lunch."
+  },
+  {
+   "file": "ja_49.wav",
+   "district": "crossing",
+   "text": "大きな画面が「笑って」って言うから、笑ってます。",
+   "en": "The giant screen said smile, so I'm smiling."
+  },
+  {
+   "file": "ja_50.wav",
+   "district": "akari",
+   "text": "看板がみんな叫んでるから、私は小声で返してる。",
+   "en": "Every sign here is shouting, and I'm whispering back."
+  },
+  {
+   "file": "ja_51.wav",
+   "district": "akari",
+   "text": "ラーメン食べに来て、結局三杯食べちゃった。",
+   "en": "I came for ramen and ended up having three bowls."
+  },
+  {
+   "file": "ja_52.wav",
+   "district": "akari",
+   "text": "真夜中のカラオケって、予定のある叫びだよね。",
+   "en": "Karaoke at midnight is just yelling with a schedule."
+  },
+  {
+   "file": "ja_53.wav",
+   "district": "kurogane",
+   "text": "仕事は物流。毎晩、自分を家まで配送してる。",
+   "en": "I work in shipping. I ship myself home every night."
+  },
+  {
+   "file": "ja_54.wav",
+   "district": "kurogane",
+   "text": "港は静か。いろいろ以外はね。",
+   "en": "The docks are peaceful. Except for everything."
+  },
+  {
+   "file": "ja_55.wav",
+   "district": "tower",
+   "text": "一度タワーに登ったよ。ほとんどエレベーターがやってくれたけど。",
+   "en": "I climbed the tower once. The elevator did most of it."
+  },
+  {
+   "file": "ja_56.wav",
+   "district": "tower",
+   "text": "高い所が苦手だから、タワーは下から見る派。",
+   "en": "I'm scared of heights, so I only look at the tower from below."
+  },
+  {
+   "file": "ja_57.wav",
+   "district": "sakura",
+   "text": "ここは静かだね。自販機まで小声みたい。",
+   "en": "It's quiet here. Even the vending machines whisper."
+  },
+  {
+   "file": "ja_58.wav",
+   "district": "sakura",
+   "text": "お隣さん、毎朝プラスチックの花に水をあげてる。",
+   "en": "My neighbour waters his plastic flowers every morning."
+  },
+  {
+   "file": "ja_59.wav",
+   "district": "beach",
+   "text": "家の砂から逃げてきたのに、ビーチに来ちゃった。",
+   "en": "I came to the beach to get away from the sand at home."
+  },
+  {
+   "file": "ja_60.wav",
+   "district": "beach",
+   "text": "日焼けにぴったりの夜だね。月焼けだけど。",
+   "en": "Perfect night for a tan. A moon tan."
+  }
+ ],
+ "ja_scared": [
+  {
+   "file": "jg_scared_0.wav",
+   "district": "*",
+   "text": "ちょっと！そこ歩いてたんだけど！",
+   "en": "Hey! I was walking there!"
+  },
+  {
+   "file": "jg_scared_1.wav",
+   "district": "*",
+   "text": "うわっ、危ない！",
+   "en": "Whoa, watch out!"
+  },
+  {
+   "file": "jg_scared_2.wav",
+   "district": "*",
+   "text": "また靴が！もう！",
+   "en": "My shoes! Not again!"
+  },
+  {
+   "file": "jg_scared_3.wav",
+   "district": "*",
+   "text": "気をつけてよ！",
+   "en": "Be careful!"
+  },
+  {
+   "file": "jg_scared_4.wav",
+   "district": "*",
+   "text": "びっくりした…！",
+   "en": "You scared me!"
+  }
+ ],
+ "ja_jacked": [
+  {
+   "file": "jg_jacked_0.wav",
+   "district": "*",
+   "text": "ちょっと、それ僕の車だよ！",
+   "en": "Hey! That's my car!"
+  },
+  {
+   "file": "jg_jacked_1.wav",
+   "district": "*",
+   "text": "さっき洗車したばかりなのに！",
+   "en": "I just had it washed!"
+  },
+  {
+   "file": "jg_jacked_2.wav",
+   "district": "*",
+   "text": "もういいよ、歩いて帰る！",
+   "en": "Fine! I'll walk home!"
+  },
+  {
+   "file": "jg_jacked_3.wav",
+   "district": "*",
+   "text": "泥棒！誰か警察を呼んで！",
+   "en": "Thief! Someone call the police!"
+  }
+ ],
+ "ja_police": [
+  {
+   "file": "jg_police_0.wav",
+   "district": "*",
+   "text": "止まれ！警察だ！",
+   "en": "Stop! Police!"
+  },
+  {
+   "file": "jg_police_1.wav",
+   "district": "*",
+   "text": "車を止めなさい！",
+   "en": "Pull the car over!"
+  },
+  {
+   "file": "jg_police_2.wav",
+   "district": "*",
+   "text": "そこの車、止まりなさい！",
+   "en": "You in that car, stop!"
+  },
+  {
+   "file": "jg_police_3.wav",
+   "district": "*",
+   "text": "逃げても無駄だ！",
+   "en": "There's no point running!"
+  },
+  {
+   "file": "jg_police_4.wav",
+   "district": "*",
+   "text": "両手を見せなさい！",
+   "en": "Show me your hands!"
+  }
+ ],
+ "ja_busted": [
+  {
+   "file": "jg_busted_0.wav",
+   "district": "*",
+   "text": "はい、そこまで。署まで来てもらいます。",
+   "en": "All right, that's enough. You're coming to the station."
+  },
+  {
+   "file": "jg_busted_1.wav",
+   "district": "*",
+   "text": "安全運転でお願いしますね。罰金です。",
+   "en": "Please drive safely. That's a fine."
+  }
+ ],
+ "ja_taxi_board": [
+  {
+   "file": "jg_taxi_board_0.wav",
+   "district": "*",
+   "text": "いらっしゃいませ。どちらまで？",
+   "en": "Welcome. Where to?"
+  },
+  {
+   "file": "jg_taxi_board_1.wav",
+   "district": "*",
+   "text": "こんにちは。どちらへ行きましょうか？",
+   "en": "Hello. Where shall we go?"
+  }
+ ],
+ "ja_taxi_go": [
+  {
+   "file": "jg_taxi_go_0.wav",
+   "district": "*",
+   "text": "かしこまりました。シートベルトをお願いします。",
+   "en": "Certainly. Please fasten your seatbelt."
+  },
+  {
+   "file": "jg_taxi_go_1.wav",
+   "district": "*",
+   "text": "了解です。少々お待ちください。",
+   "en": "Got it. Just a moment."
+  }
+ ],
+ "ja_taxi_arrive": [
+  {
+   "file": "jg_taxi_arrive_0.wav",
+   "district": "*",
+   "text": "着きました。ありがとうございました！",
+   "en": "Here we are. Thank you very much!"
+  },
+  {
+   "file": "jg_taxi_arrive_1.wav",
+   "district": "*",
+   "text": "お疲れさまでした。お気をつけて。",
+   "en": "Thanks for riding. Take care."
+  }
+ ],
+ "ja_shop": [
+  {
+   "file": "jg_shop_0.wav",
+   "district": "*",
+   "text": "いらっしゃいませ！補充ですね、かしこまりました。",
+   "en": "Welcome! A refill? Certainly."
+  },
+  {
+   "file": "jg_shop_1.wav",
+   "district": "*",
+   "text": "毎度ありがとうございます！",
+   "en": "Thank you as always!"
+  }
+ ],
+ "ja_shop_poor": [
+  {
+   "file": "jg_shop_poor_0.wav",
+   "district": "*",
+   "text": "すみません、三百円足りないみたいです。",
+   "en": "Sorry, you seem to be ¥300 short."
+  }
+ ],
+ "ja_op119": [
+  {
+   "file": "jg_op119_0.wav",
+   "district": "*",
+   "text": "はい、119番です。救急車がすぐに向かいます。",
+   "en": "This is 119. An ambulance is on its way."
+  }
+ ],
+ "ja_paramedic": [
+  {
+   "file": "jg_paramedic_0.wav",
+   "district": "*",
+   "text": "手当て完了です。安全運転でお願いしますね！",
+   "en": "All patched up. Please drive safely!"
+  }
+ ],
+ "ja_paramedic_fine": [
+  {
+   "file": "jg_paramedic_fine_0.wav",
+   "district": "*",
+   "text": "…どこもケガしてないみたいですね。",
+   "en": "...You don't seem to be hurt anywhere."
+  }
+ ],
+ "ja_rival": [
+  {
+   "file": "jg_rival_0.wav",
+   "district": "*",
+   "text": "負けないよ！",
+   "en": "I won't lose!"
+  },
+  {
+   "file": "jg_rival_1.wav",
+   "district": "*",
+   "text": "お先に失礼！",
+   "en": "See you at the finish!"
+  },
+  {
+   "file": "jg_rival_2.wav",
+   "district": "*",
+   "text": "いい勝負にしよう！",
+   "en": "Let's make it a good race!"
+  }
+ ],
+ "ja_ramen": [
+  {
+   "file": "jg_ramen_0.wav",
+   "district": "*",
+   "text": "いらっしゃいませ！ラーメンいかがですか？",
+   "en": "Welcome! How about some ramen?"
+  },
+  {
+   "file": "jg_ramen_1.wav",
+   "district": "*",
+   "text": "今日のおすすめは味噌ラーメンです！",
+   "en": "Today's special is miso ramen!"
+  },
+  {
+   "file": "jg_ramen_2.wav",
+   "district": "*",
+   "text": "替え玉、無料ですよ！",
+   "en": "Extra noodles are free!"
+  },
+  {
+   "file": "jg_ramen_3.wav",
+   "district": "*",
+   "text": "ごちそうさまでした！また来てね！",
+   "en": "Thanks for eating with us! Come again!"
+  }
+ ],
+ "ja_tsunami": [
+  {
+   "file": "jg_tsunami_0.wav",
+   "district": "*",
+   "text": "津波だ！高い所へ逃げて！",
+   "en": "Tsunami! Get to high ground!"
+  },
+  {
+   "file": "jg_tsunami_1.wav",
+   "district": "*",
+   "text": "うわ、水が来た！",
+   "en": "Whoa, here comes the water!"
+  }
+ ],
+ "ja_bar": [
+  {
+   "file": "jg_bar_0.wav",
+   "district": "*",
+   "text": "いらっしゃいませ！何にします？",
+   "en": "Welcome! What can I get you?"
+  },
+  {
+   "file": "jg_bar_1.wav",
+   "district": "*",
+   "text": "今日は海がきれいですね。",
+   "en": "The sea looks lovely today."
+  },
+  {
+   "file": "jg_bar_2.wav",
+   "district": "*",
+   "text": "冷たいビール、ありますよ。",
+   "en": "We've got ice-cold beer."
+  }
+ ],
+ "ja_bar_serve": [
+  {
+   "file": "jg_bar_serve_0.wav",
+   "district": "*",
+   "text": "お待たせしました、どうぞ！",
+   "en": "Here you go, enjoy!"
+  },
+  {
+   "file": "jg_bar_serve_1.wav",
+   "district": "*",
+   "text": "乾杯！",
+   "en": "Cheers!"
+  },
+  {
+   "file": "jg_bar_serve_2.wav",
+   "district": "*",
+   "text": "飲みすぎに注意してくださいね。",
+   "en": "Don't overdo it, okay?"
+  }
+ ],
+ "taxi_en_hello": [
+  {
+   "file": "taxi_en_hello_0.wav",
+   "district": "*",
+   "text": "Hello! Where to today?"
+  },
+  {
+   "file": "taxi_en_hello_1.wav",
+   "district": "*",
+   "text": "Hiya! Where are we off to?"
+  }
+ ],
+ "taxi_en_go": [
+  {
+   "file": "taxi_en_go_0.wav",
+   "district": "*",
+   "text": "Right, off we go."
+  },
+  {
+   "file": "taxi_en_go_1.wav",
+   "district": "*",
+   "text": "Lovely, buckle up then."
+  }
+ ],
+ "taxi_en_arrive": [
+  {
+   "file": "taxi_en_arrive_0.wav",
+   "district": "*",
+   "text": "Here we are."
+  },
+  {
+   "file": "taxi_en_arrive_1.wav",
+   "district": "*",
+   "text": "Here we are, safe and sound."
+  }
+ ],
+ "taxi_en_pay": [
+  {
+   "file": "taxi_en_pay_0.wav",
+   "district": "*",
+   "text": "Cheers, have a good one."
+  },
+  {
+   "file": "taxi_en_pay_1.wav",
+   "district": "*",
+   "text": "Mind how you go."
+  }
+ ],
+ "taxi_en_oops": [
+  {
+   "file": "taxi_en_oops_0.wav",
+   "district": "*",
+   "text": "Whoops! Anyway..."
+  },
+  {
+   "file": "taxi_en_oops_1.wav",
+   "district": "*",
+   "text": "Lovely day for it!"
+  },
+  {
+   "file": "taxi_en_oops_2.wav",
+   "district": "*",
+   "text": "As I was saying..."
+  },
+  {
+   "file": "taxi_en_oops_3.wav",
+   "district": "*",
+   "text": "Nearly there!"
+  },
+  {
+   "file": "taxi_en_oops_4.wav",
+   "district": "*",
+   "text": "Didn't see him there. Anyway!"
+  },
+  {
+   "file": "taxi_en_oops_5.wav",
+   "district": "*",
+   "text": "Never mind, we're fine!"
+  }
+ ],
+ "ja_crash_shout": [
+  {
+   "file": "jg_crash_shout_0.wav",
+   "district": "*",
+   "text": "おい！どこ見て運転してるんだ！",
+   "en": "Hey! Where are you looking?!"
+  },
+  {
+   "file": "jg_crash_shout_1.wav",
+   "district": "*",
+   "text": "危ないじゃないか！",
+   "en": "That was dangerous!"
+  },
+  {
+   "file": "jg_crash_shout_2.wav",
+   "district": "*",
+   "text": "ちょっと！止まりなさいよ！",
+   "en": "Hey! Stop right there!"
+  },
+  {
+   "file": "jg_crash_shout_3.wav",
+   "district": "*",
+   "text": "またあのタクシーか！",
+   "en": "That taxi again?!"
   }
  ]
 }

@@ -11,7 +11,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEX = os.path.join(ROOT, "assets", "tex"); OUT = os.path.join(ROOT, "assets", "models")
 bpy.ops.wm.read_factory_settings(use_empty=True)
 sc = bpy.context.scene; sc.render.engine = "CYCLES"; sc.cycles.samples = 4; sc.cycles.device = "CPU"
-WHO = os.environ.get("WHO", "ana"); CD = CON + ("/cache_daniel/" if WHO == "daniel" else "/cache/"); SUF = "_daniel" if WHO == "daniel" else ""
+WHO = os.environ.get("WHO", "ana"); CD = CON + {"daniel": "/cache_daniel/", "miyo": "/cache_miyo/"}.get(WHO, "/cache/"); SUF = {"daniel": "_daniel", "miyo": "_miyo"}.get(WHO, "")
 OUTFIT = os.environ.get("OUTFIT", "default")
 BARE = OUTFIT in ("bikini", "swim")
 if OUTFIT != "default": SUF = "_" + OUTFIT
@@ -72,7 +72,11 @@ def bake(o, m, img_name, size, kind):
         bpy.ops.object.bake(type="NORMAL", normal_space="TANGENT", margin=8)
     img.filepath_raw = os.path.join(TEX, img_name + ".png"); img.file_format = "PNG"; img.save()
     m.node_tree.nodes.remove(n); return img
-img_c = bake(skin, M, "skin_c" + SUF, 2048, "DIFFUSE"); img_n = bake(skin, M, "skin_n" + SUF, 2048, "NORMAL")
+img_c = bake(skin, M, "skin_c" + SUF, 2048, "DIFFUSE")
+if WHO == "miyo":   # warmer, sun-tanned site-worker skin tone
+    _p = np.empty(len(img_c.pixels), np.float32); img_c.pixels.foreach_get(_p); _p = _p.reshape(-1, 4)
+    _p[:, :3] *= np.array([0.88, 0.76, 0.66], np.float32); img_c.pixels.foreach_set(_p.ravel()); img_c.save()
+img_n = bake(skin, M, "skin_n" + SUF, 2048, "NORMAL")
 print("BAKED skin", flush=True)
 def tex_mat(name, img_c, img_n=None, rough=0.5):
     m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; b = nt.nodes["Principled BSDF"]
@@ -101,6 +105,13 @@ def part(name, key, tris, col, rough=0.7, metal=0.0):
     o = obj(name, D[key + "_V"], D[key + "_F"]); decimate(o, tris); o.data.materials.append(pmat(name, col, rough, metal)); return o
 if WHO == "daniel" and OUTFIT == "swim":
     D0 = D; D = D2; trousers = part("trousers", "shorts", 4000, (0.08, 0.42, 0.58), 0.7); D = D0
+elif WHO == "miyo":
+    tank = part("tank", "tank", 4500, (0.10, 0.12, 0.16), 0.85)                     # charcoal work tee
+    vest = part("vest", "vest", 4000, (1.0, 0.36, 0.02), 0.55)                     # hi-vis orange vest
+    bands = part("bands", "bands", 1600, (0.86, 0.88, 0.84), 0.22, 0.35)           # reflective strips
+    hat = part("hardhat", "hardhat", 3000, (1.0, 0.78, 0.04), 0.32)               # yellow hard hat
+    trousers = part("trousers", "trousers", 7000, (0.30, 0.28, 0.21), 0.9)        # khaki cargo work trousers
+    belt = part("belt", "belt", 700, (0.20, 0.12, 0.05), 0.4); buckle = part("buckle", "buckle", 200, (0.8, 0.8, 0.85), 0.2, 1.0)
 elif WHO == "daniel":
     tank = part("tank", "tank", 4500, (1, 1, 1), 0.85)
     activate(tank); bpy.ops.object.mode_set(mode="EDIT"); bpy.ops.mesh.select_all(action="SELECT")
@@ -129,7 +140,9 @@ else:
     trousers = part("trousers", "trousers", 7000, (0.62, 0.07, 0.06), 0.85)
     belt = part("belt", "belt", 700, (0.02, 0.02, 0.02), 0.4); buckle = part("buckle", "buckle", 200, (0.8, 0.8, 0.85), 0.2, 1.0)
     choker = part("choker", "choker", 500, (0.01, 0.01, 0.012), 0.8)
-if OUTFIT == "police":
+if WHO == "miyo":
+    shoes = [part("shoe", k, 1600, (0.42, 0.26, 0.11) if k.startswith("boot") else (0.06, 0.05, 0.04), 0.6) for k in ("bootR", "soleR", "bootL", "soleL")]
+elif OUTFIT == "police":
     D0 = D; D = D2; shoes = [part("shoe", k, 1600, (0.03, 0.03, 0.035), 0.35) for k in ("bootR", "bootL")]; D = D0
 elif BARE:
     D0 = D; D = D2; shoes = [part("ff" + k, "ff" + k, 900, (0.95, 0.45, 0.35), 0.6) for k in ("R", "L")]; D = D0
@@ -168,7 +181,7 @@ def split_arm(o, side, name, margin_copy=0.008, margin_del=0.004):
     return no
 arms = {sd: split_arm(skin, sd, "arm" + sd) for sd in ("R", "L")}
 sleeves = {}
-if (WHO == "daniel" and OUTFIT == "default") or OUTFIT == "police":     # short sleeves swing with the arm
+if (WHO in ("daniel", "miyo") and OUTFIT == "default") or OUTFIT == "police":     # short sleeves swing with the arm
     sleeves = {sd: split_arm(tank, sd, "sleeve" + sd, 0.004, 0.004) for sd in ("R", "L")}
 print("ARMS", {k: len(v.data.polygons) for k, v in arms.items()}, {k: len(v.data.polygons) for k, v in sleeves.items()}, flush=True)
 def sep(o, pred, name):   # UV-preserving split (bare skin legs keep the baked skin texture)
@@ -217,6 +230,8 @@ ns = len(N)
 TAPER = 0.22   # wide, barely tapered overlapping cards: no spiky silhouette, no sub-pixel shimmer
 if WHO == "daniel":
     hair = ribbons("hair", rng.choice(ns, 2200, replace=False), int(N[0]), 0.015, (0.03, 0.02, 0.015), (0.06, 0.04, 0.03))
+elif WHO == "miyo":
+    hair = ribbons("hair", rng.choice(ns, 1500, replace=False), 11, 0.024, (0.05, 0.022, 0.012), (0.20, 0.08, 0.035))
 else:
     hair = ribbons("hair", rng.choice(ns, 1500, replace=False), 11, 0.024, (0.04, 0.02, 0.022), (0.11, 0.04, 0.055))
 TAPER = 0.55
@@ -233,7 +248,7 @@ _keep = np.array([_kr.find(tuple(c))[2] < 0.010 for c in _cent])
 _SF = _HF[_keep]; _used = np.unique(_SF); _remap = -np.ones(len(_HV), int); _remap[_used] = np.arange(len(_used))
 _SV = _HV[_used] + _vn[_used] * 0.0035
 _sm = bpy.data.meshes.new("hshell"); _sm.from_pydata([tuple(v) for v in _SV], [], [tuple(_remap[f]) for f in _SF]); _sm.update()
-_sc = (0.03, 0.02, 0.015) if WHO == "daniel" else (0.04, 0.02, 0.022)
+_sc = (0.03, 0.02, 0.015) if WHO == "daniel" else ((0.05, 0.022, 0.012) if WHO == "miyo" else (0.04, 0.02, 0.022))
 _ca = _sm.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
 for i in range(len(_SV)): _ca.data[i].color = (*_sc, 1)
 for p_ in _sm.polygons: p_.use_smooth = True
@@ -308,6 +323,6 @@ if BARE:
     for s_, leg in _ff_pairs:
         s_.parent = leg; s_.matrix_parent_inverse = leg.matrix_world.inverted()
 bpy.ops.object.select_all(action="SELECT")
-bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, ("daniel" if WHO == "daniel" else "heroine") + ("" if OUTFIT == "default" else "_" + OUTFIT) + ".glb"), export_format="GLB", export_apply=True, export_tangents=True,
+bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, {"daniel": "daniel", "miyo": "miyoyazu"}.get(WHO, "heroine") + ("" if OUTFIT == "default" else "_" + OUTFIT) + ".glb"), export_format="GLB", export_apply=True, export_tangents=True,
                           export_image_format="JPEG", export_jpeg_quality=90)
 print("EXPORTED", {o.name: len(o.data.polygons) for o in bpy.data.objects if o.type == "MESH"}, flush=True)

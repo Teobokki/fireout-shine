@@ -61,19 +61,22 @@ void main() {
   vec3 Ls = normalize(sundir);
   float sdl = max(dot(N, Ls), 0.0); float swr = max((dot(N, Ls) + 0.45) / 1.45, 0.0);
   vec3 dhemi = mix(vec3(0.42, 0.38, 0.34), vec3(0.55, 0.66, 0.85), N.z * 0.5 + 0.5);
-  vec3 ddiff = c * (dhemi * 1.25 + vec3(1.15, 1.05, 0.92) * mix(sdl, swr, sheen) * 1.25);
+  vec3 ddiff = c * (dhemi * 1.0 + vec3(1.15, 1.05, 0.92) * mix(sdl, swr, sheen) * 1.0);   // v1.0.4: no over-exposure
   diff = mix(diff, ddiff, dayk); L = normalize(mix(L, Ls, dayk));
   vec3 R = reflect(-V, N);
   vec2 euv = vec2(atan(R.y, R.x) / 6.2831 + 0.5, clamp(0.5 - asin(clamp(R.z, -1.0, 1.0)) / 3.1416, 0.01, 0.99));
   vec3 env = mix(texture2D(envmap, euv).rgb, texture2D(envday, vec2(euv.x, 1.0 - euv.y)).rgb, dayk);
   float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   float spec_amt = gloss * mix(0.25, 1.0, p3d_Material.metallic);
-  vec3 col = diff * (1.0 - spec_amt * 0.5) + env * (fres * gloss + spec_amt * 0.35) * mix(vec3(1.0), c + 0.25, p3d_Material.metallic);
+  // v1.0.4: skin / cloth (sheen) get only a faint grazing reflection - no glowing white outline on arms and legs
+  float fk = fres * gloss * (1.0 - 0.85 * clamp(sheen, 0.0, 1.0));
+  vec3 col = diff * (1.0 - spec_amt * 0.5) + env * (fk + spec_amt * 0.35) * mix(vec3(1.0), c + 0.25, p3d_Material.metallic);
   vec3 H = normalize(L + V);
   col += vec3(0.7, 0.75, 1.0) * pow(max(dot(N, H), 0.0), mix(8.0, 90.0, gloss)) * gloss * 0.6;
-  col += c * sheen * 0.15 * pow(1.0 - max(dot(N, V), 0.0), 2.0) * vec3(1.0, 0.6, 0.7);   // soft skin/cloth rim
+  // (v1.0.4: the pink skin/cloth rim light was removed - it made legs and arms look like they were glowing)
   col += p3d_Material.emission.rgb * emitboost;
   col *= p3d_ColorScale.rgb;
+  col = min(col, vec3(0.82) + 0.18 * (1.0 - exp(-(max(col - vec3(0.82), vec3(0.0))) * 4.0)));   // soft highlight roll-off instead of clipping to white
   float f = 1.0 - exp(-fogden * fogden * vdist * vdist);
   col = mix(col, mix(fogcol, fogday, dayk), clamp(f, 0.0, 1.0));
   gl_FragColor = vec4(col, base.a * p3d_ColorScale.a);

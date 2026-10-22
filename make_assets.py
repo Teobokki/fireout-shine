@@ -22,17 +22,8 @@ ic.save(os.path.join(A, "icon.ico"), sizes=[(16, 16), (24, 24), (32, 32), (48, 4
 bg = sq.resize((1920, 1920), Image.LANCZOS).crop((0, 420, 1920, 1500)).filter(ImageFilter.GaussianBlur(28))
 ImageEnhance.Brightness(bg).enhance(0.5).save(os.path.join(A, "backdrop.jpg"), quality=88)
 
-# ---------------- JP font subset (Noto Sans CJK JP Bold, SIL OFL) with only the glyphs the UI needs
-from fontTools import subset
-from fontTools.ttLib import TTCollection
-import fs_lines
-chars = set("".join([j for _, j, _ in fs_lines.LINES_JA] + D.UI_JP + D.SIGNS_H + D.SIGNS_V + [D.HEROINE_JP] + [c["jp"] for c in D.CARS.values()]))
-chars |= set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ・ー-/:!?.,()+%▲▼◀▶●★☆¥&'\"*")
-chars |= set("".join(d[2] for d in D.DISTRICTS) + "".join(r["jp"] for r in D.RACES) + "新光灯港桜一時停止" + D.GET_WANTED_JP)
-f = TTCollection(CJK).fonts[0]
-opt = subset.Options(); opt.layout_features = ["*"]; opt.name_IDs = ["*"]; opt.notdef_outline = True
-sb = subset.Subsetter(opt); sb.populate(text="".join(sorted(chars))); sb.subset(f)
-f.flavor = None; f.save(os.path.join(A, "jp_font.otf"))
+# ---------------- JP font: full JIS X 0208 subset of Noto Sans CJK JP Bold (SIL OFL) - see tools_jp_font.py (v1.0.4)
+exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools_jp_font.py"), encoding="utf-8").read())
 
 def glow_text(img, xy, text, font, col, anchor="mm", blur=(18, 7), core=(1, 1, 1), stroke=0):
     lay = Image.new("RGBA", img.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay)

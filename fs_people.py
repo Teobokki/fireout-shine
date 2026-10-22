@@ -1,4 +1,4 @@
-"""On-foot characters: ANA & DANIEL (playable duo) and pedestrians (same v2 skin texture set, varied outfits)."""
+"""On-foot characters: ANA, DANIEL & MIYOYAZU (playable crew) and pedestrians (same v2 skin texture set, varied outfits)."""
 import math, os, random
 from panda3d.core import NodePath, Filename, TextNode, SamplerState
 import fs_shaders
@@ -11,14 +11,30 @@ PED_HAIR = [(1, 1, 1), (0.6, 0.6, 0.6), (2.2, 1.6, 1.1), (3.0, 2.6, 1.8), (1.6, 
 
 OUTFITS = [("default", "DEFAULT", "Tank top, red slacks, sneakers"), ("crop", "CROP TOP", "White fitted crop top, red slacks, sneakers"), ("bikini", "BIKINI", "Coral two-piece swimsuit, flip-flops"),
            ("police", "POLICE", "TOKYO NEON PD uniform: shirt, cap, badge, boots")]
+# v1.0.4: one outfit table per playable character - used by the house WARDROBE and the pause-menu CLOTHING switcher
+CREW_OUTFITS = {"ana": OUTFITS,
+                "daniel": [("default", "DEFAULT", "Floral shirt, navy trousers, sneakers"), ("swim", "SWIM SHORTS", "Blue swim shorts, bare feet")],
+                "miyo": [("default", "CONSTRUCTION", "Hi-vis vest, hard hat, cargo work trousers, work boots")]}
+
+
+def outfits_for(app_base, who):
+    """the outfits this character really has (an outfit whose model file is missing is left out)"""
+    out = []
+    for oid, nm, desc in CREW_OUTFITS.get(who, CREW_OUTFITS["ana"]):
+        fn = BAM.get(who, "heroine") + ("" if oid == "default" else "_" + oid) + ".bam"
+        if oid == "default" or os.path.exists(os.path.join(app_base, "assets", "models", fn)): out.append((oid, nm, desc))
+    return out
+
+
 _faces = {}
+BAM = {"daniel": "daniel", "miyo": "miyoyazu"}
 def load(app, who, outfit="default"):
     key = who if outfit == "default" else who + "_" + outfit
     if key not in _models:
-        fn = ("daniel" if who == "daniel" else "heroine") + ("" if outfit == "default" else "_" + outfit) + ".bam"
+        fn = BAM.get(who, "heroine") + ("" if outfit == "default" else "_" + outfit) + ".bam"
         p = os.path.join(app.BASE, "assets", "models", fn)
-        if not os.path.exists(p): p = os.path.join(app.BASE, "assets", "models", "heroine.bam" if who != "daniel" else "daniel.bam"); outfit = "default"
-        if who == "daniel" and not os.path.exists(p):
+        if not os.path.exists(p): p = os.path.join(app.BASE, "assets", "models", BAM.get(who, "heroine") + ".bam"); outfit = "default"
+        if who != "ana" and not os.path.exists(p):
             p = os.path.join(app.BASE, "assets", "models", "heroine.bam")
         m = app.loader.load_model(Filename.from_os_specific(p)); fix_uv(m); _models[key] = m
     return _models[key].copy_to(NodePath(who))
@@ -56,20 +72,20 @@ class Person:
         self.vx = self.vy = 0.0
         self.phase = 0.0; self.knock = 0.0; self.health = 100.0; self.in_car = None; self.hidden = False
         self.np = app.render.attach_new_node("person"); self.ped = ped
-        self.outfit = getattr(game, "outfit", "default") if who == "ana" and not ped else "default"
-        if who == "ana" and self.outfit != "default" and not os.path.exists(os.path.join(app.BASE, "assets", "models", "heroine_%s.bam" % self.outfit)): self.outfit = "default"
+        self.outfit = (getattr(game, "outfits", {}) or {}).get(who, "default") if not ped else "default"
+        if self.outfit not in [o[0] for o in outfits_for(app.BASE, who)]: self.outfit = "default"
         self.build_model()
         self.np.set_pos(x, y, 0.0); self.np.set_h(h)
 
     def set_outfit(self, outfit):
         if outfit == self.outfit: return
-        self.outfit = outfit; self.model.remove_node(); self.build_model()
+        self.outfit = outfit; self.model.remove_node(); self._chew_np = None; self.build_model()
 
     def build_model(self):
         app = self.app; who = self.who; ped = self.ped
-        base = "daniel" if who == "daniel" else "ana"
+        base = who if who in ("daniel", "miyo") else "ana"
         m = load(app, base, self.outfit); m.reparent_to(self.np); m.set_h(180); self.model = m
-        suf = "_daniel" if base == "daniel" and os.path.exists(os.path.join(app.BASE, "assets", "tex", "skin_c_daniel.png")) else ""
+        suf = "_" + base if base != "ana" and os.path.exists(os.path.join(app.BASE, "assets", "tex", "skin_c_%s.png" % base)) else ""
         if self.outfit != "default" and os.path.exists(os.path.join(app.BASE, "assets", "tex", "skin_c_%s.png" % self.outfit)):
             suf = "_" + self.outfit
         fs_shaders.apply(m, app, gloss=0.15, sheen=0.4)
@@ -111,24 +127,71 @@ class Person:
                 lg.set_texture(tex(app, "skin_c%s.png" % suf), 1)
                 fs_shaders.apply(lg, app, gloss=0.22, tex=True, nmap=tex(app, "skin_n%s.png" % suf), sheen=0.8)
                 for ff in lg.find_all_matches("**/ff*"): fs_shaders.apply(ff, app, gloss=0.2, sheen=0.3)
+        if base == "miyo":     # hi-vis: the orange vest and reflective strips pop, the hard hat has a glossy shell
+            for nm, kw in (("vest", dict(gloss=0.25, sheen=0.2, emitboost=0.35)), ("bands", dict(gloss=0.9, sheen=0.0, emitboost=0.8)),
+                           ("hardhat", dict(gloss=0.7, sheen=0.1))):
+                n = m.find("**/" + nm)
+                if not n.is_empty(): fs_shaders.apply(n, app, **kw)
         if self.outfit == "police":
             bd = m.find("**/badge")
             if not bd.is_empty(): fs_shaders.apply(bd, app, gloss=0.9, sheen=0.0, emitboost=1.0)
         self.upper = [c for c in m.get_children() if c.get_name() not in ("legL", "legR")]
         if ped:
             rnd = random.Random()
-            for nm, pal in (("tank", PED_TOPS), ("straps", None), ("trousers", PED_BOTTOMS), ("hair", PED_HAIR)):
+            # never ANA's signature look (black tank + choker + red slacks + black bob) or DANIEL's floral shirt
+            ch = m.find("**/choker")
+            if not ch.is_empty(): ch.remove_node()
+            for n in [m.find("**/tank")] + list(m.find_all_matches("**/sleeve*")) + list(m.find_all_matches("**/tank.*")):
+                if not n.is_empty(): n.set_texture_off(2); n.set_shader_input("use_tex", 0.0)
+            tops = [c for c in PED_TOPS if max(c) > 0.3] + [(0.55, 0.62, 0.7), (0.95, 0.55, 0.45), (0.4, 0.3, 0.25), (0.92, 0.9, 0.8)]
+            bottoms = [c for c in PED_BOTTOMS if not (c[0] > 0.4 and c[1] < 0.2)] + [(0.22, 0.32, 0.5), (0.35, 0.35, 0.38)]
+            hairs = [h for h in PED_HAIR if h != (1, 1, 1)]
+            hr_ = m.find("**/hair")
+            if not hr_.is_empty():
+                v = rnd.random()                 # different hair silhouettes: fuller, cropped or a bun
+                hc = hr_.get_bounds().get_center()
+                def hscale(sx, sy, sz, h=hr_, c=hc):
+                    h.set_scale(sx, sy, sz); h.set_pos(c[0] * (1 - sx), c[1] * (1 - sy), c[2] * (1 - sz))
+                if base == "ana":
+                    if v < 0.35: hscale(1.06, 1.12, 1.03)
+                    elif v < 0.65:
+                        from fs_miyo import blob_mesh
+                        bun = m.attach_new_node(blob_mesh("bun", [(-0.012, 0.16, 1.64, 0.055, 0.05, 0.05), (-0.012, 0.13, 1.66, 0.045, 0.04, 0.04)], (0.06, 0.05, 0.045, 1)))
+                        bun.reparent_to(hr_.get_parent()); bun.set_name("hair_bun"); fs_shaders.apply(bun, app, gloss=0.35, sheen=0.3); hscale(0.98, 0.96, 1.0)
+                else:
+                    if v < 0.4: hscale(1.05, 1.08, 1.08)
+                    elif v < 0.7: hscale(1.0, 0.98, 0.94)
+            for nm, pal in (("tank", tops), ("straps", None), ("trousers", bottoms), ("hair", hairs)):
                 n = m.find("**/" + nm)
                 if n.is_empty(): continue
                 if nm == "straps":
                     n.set_shader_input("tint", self._top + (1,)); continue
                 c = rnd.choice(pal)
-                if nm == "tank": self._top = c
-                n.set_shader_input("tint", c + (1,))
+                if nm == "tank":
+                    self._top = c
+                    for sl in [n] + list(m.find_all_matches("**/sleeve*")) + list(m.find_all_matches("**/tank.*")): recolor(sl, c)
+                    continue
                 if nm == "trousers":
-                    for lg in (self.legL, self.legR):
-                        if not lg.is_empty(): lg.set_shader_input("tint", c + (1,))
+                    from panda3d.core import MaterialAttrib
+                    g0 = n if n.node().get_type().get_name() == "GeomNode" else n.find("**/+GeomNode")
+                    ma = g0.node().get_geom_state(0).get_attrib(MaterialAttrib)
+                    ob = ma.get_material().get_base_color() if ma is not None else (0.6, 0.07, 0.06, 1)
+                    recolor(n, c)
+                    for lg in (self.legL, self.legR):          # the trouser legs - shoes keep their colour
+                        if not lg.is_empty(): recolor(lg, c, only=lambda b, ob=ob: abs(b[0] - ob[0]) + abs(b[1] - ob[1]) + abs(b[2] - ob[2]) < 0.06)
+                    continue
+                n.set_shader_input("tint", c + (1,))
+                if nm == "hair":
+                    bn = m.find("**/hair_bun")
+                    if not bn.is_empty(): bn.set_shader_input("tint", c + (1,))
             sc = rnd.uniform(0.94, 1.04); m.set_scale(sc)
+            # v1.0.4: NPCs share ANA's realistic skin (same skin_c / skin_n maps + skin shading); only a slight natural
+            # tone variation per person so nobody looks cloned
+            k = rnd.uniform(-1, 1); w = rnd.uniform(-1, 1)
+            tone = (1.0 + 0.03 * k + 0.02 * w, 1.0 + 0.035 * k, 1.0 + 0.04 * k - 0.03 * w, 1)
+            for n in [m.find("**/skin")] + list(m.find_all_matches("**/arm*")) + list(m.find_all_matches("**/fore*")) + \
+                     list(m.find_all_matches("**/fingers*")) + list(m.find_all_matches("**/fist*")):
+                if not n.is_empty() and "sleeve" not in n.get_name(): n.set_shader_input("tint", tone)
 
     def walk_anim(self, dt, speed):
         if self.knock > 0:
@@ -166,7 +229,10 @@ class Person:
     def swing_arms(self, a, k, speed):
         """arms hang relaxed at the sides and swing opposite to the legs (negative pitch = forward)."""
         if self.armR.is_empty(): return
-        if self.scrub_t is not None: return
+        if self.scrub_t is not None or getattr(self, "anim_lock", False): return
+        if getattr(self, "swim", False) and self.arm_pose is None:      # treading water: sculling arms
+            w = math.sin(self.phase * 0.8)
+            self.set_arms((-55 + 22 * w, 34), (-55 - 22 * w, 34), (-45 + 15 * w, 0), (-45 - 15 * w, 0)); return
         mv = min(1.0, speed / 1.2)
         sw = a * (0.85 + 0.35 * k)                      # walk ~ +-20 deg, run ~ +-40 deg
         base = -8.0 * k * mv                            # running: arms carried slightly forward
@@ -209,10 +275,10 @@ class Person:
         if old is not None and not old.is_empty(): old.remove_node()
         self.face_np = None; self.expression = expr
         if expr == "neutral" or self.ped: return
-        bam = ("daniel" if self.who == "daniel" else "heroine") + ("" if self.outfit == "default" else "_" + self.outfit)
+        bam = BAM.get(self.who, "heroine") + ("" if self.outfit == "default" else "_" + self.outfit)
         base = self.app.BASE; jp = os.path.join(base, "assets", "models", "face_%s.json" % bam)
         if not os.path.exists(jp):
-            bam = "daniel" if self.who == "daniel" else "heroine"; jp = os.path.join(base, "assets", "models", "face_%s.json" % bam)
+            bam = BAM.get(self.who, "heroine"); jp = os.path.join(base, "assets", "models", "face_%s.json" % bam)
         if not os.path.exists(jp): return
         import json
         from panda3d.core import (GeomVertexFormat, GeomVertexData, GeomVertexWriter, GeomTriangles, Geom, GeomNode, TransparencyAttrib,
@@ -246,6 +312,28 @@ class Person:
         root.set_bin("transparent", 4); root.set_depth_write(False)
         self.face_np = root
 
+    def set_chew(self, k):
+        """v1.0.4 eating: the mouth opens and closes while chewing (mouth-only open-mouth patch, built once, toggled)"""
+        if self.ped: return
+        cn = getattr(self, "_chew_np", None)
+        if cn is None:
+            if k <= 0: return
+            keep_np, keep_ex = getattr(self, "face_np", None), getattr(self, "expression", "neutral")
+            if keep_np is not None: keep_np.detach_node()
+            self.face_np = None; self.set_expression("smile"); cn = self.face_np
+            self.face_np = keep_np; self.expression = keep_ex
+            if keep_np is not None: keep_np.reparent_to(self.model)
+            if cn is None: self._chew_np = NodePath("nochew"); return
+            for c in cn.get_children():
+                if "mouth" not in c.get_name(): c.remove_node()
+            self._chew_np = cn; cn.set_name("chew")
+            if getattr(self, "skin_tint", None) is not None:
+                cn.set_shader_input("tint", self.skin_tint, 5)
+                for gnp in cn.find_all_matches("**/+GeomNode"): gnp.set_shader_input("tint", self.skin_tint, 5)
+        if cn.is_empty() or cn.get_num_children() == 0: return
+        if k > 0.45 and (getattr(self, "face_np", None) is None): cn.show()
+        else: cn.hide()
+
     def stop_scrub(self):
         self.scrub_t = None; self.model.set_r(0); self.model.set_p(0); self.set_arms((0, 3), (0, 3), (-10, 0), (-10, 0))
 
@@ -254,9 +342,22 @@ class Person:
         # step is a quick smooth step instead of a pop
         gz = self.g.world.ground_z(self.x, self.y) if hasattr(self.g.world, "ground_z") else (0.15 if self.g.world.on_sidewalk(self.x, self.y) else 0.0)
         cur = getattr(self, "_gz", None)
-        cur = gz if cur is None or abs(gz - cur) > 0.45 else cur + (gz - cur) * 0.45
+        # v1.0.4: MIYOYAZU's BUILD structures - walls/towers block, low steps and tops can be walked on
+        B = getattr(self.g, "builds", None)
+        if B is not None and B.items and self.in_car is None:
+            self.x, self.y, st = B.resolve(self.x, self.y, cur if cur is not None else gz, 0.33)
+            if st is not None: gz = max(gz, st)
+        if cur is not None and gz < cur - 0.45: cur = max(gz, cur - 0.32)           # step / fall off a ledge over a few frames
+        else: cur = gz if cur is None or abs(gz - cur) > 0.45 else cur + (gz - cur) * 0.45
         self._gz = cur
-        self.np.set_pos(self.x, self.y, z + cur); self.np.set_h(self.h)
+        # v1.0.4: TSUNAMI - deep water lifts people up: they float / tread water with their head above the surface
+        self.swim = False; fz = 0.0
+        ts = getattr(self.g, "tsunami", None)
+        if ts is not None and self.in_car is None:
+            w = ts.level_at(self.x, self.y)
+            if w > cur + 1.05:
+                self.swim = True; fz = w - 1.22 - cur + 0.05 * math.sin(self.g.time * 2.4 + self.x)
+        self.np.set_pos(self.x, self.y, z + cur + fz); self.np.set_h(self.h)
 
     def knock_down(self, dirx, diry, power):
         self.knock = 2.4
@@ -285,7 +386,7 @@ class Person:
         self.model.set_p(0); self.model.set_z(0); self.model.set_r(0)
         if not self.armR.is_empty():     # driver: hands up on the wheel; passenger: hands resting on the lap
             drv = side == 1
-            if drv: self.set_arms((-38, 6), (-38, 6), (-48, 8), (-48, 8))
+            if drv: self.set_arms(*(getattr(self, "wheel_pose", None) or ((-38, 6), (-38, 6), (-48, 8), (-48, 8))))
             else: self.set_arms((-12, 4), (-12, 4), (-62, 6), (-62, 6))
             self.set_grip(drv, drv)
 
@@ -300,13 +401,29 @@ class Person:
         self.np.remove_node()
 
 
+def recolor(np_, c, only=None):
+    """v1.0.4: give a garment a new base colour (material override per geom; optional filter on the old base colour)"""
+    from panda3d.core import MaterialAttrib, Material
+    for gnp in np_.find_all_matches("**/+GeomNode") if np_.node().get_type().get_name() != "GeomNode" else [np_]:
+        gn = gnp.node()
+        for i in range(gn.get_num_geoms()):
+            st = gn.get_geom_state(i); ma = st.get_attrib(MaterialAttrib)
+            old = ma.get_material() if ma is not None and ma.get_material() is not None else None
+            b = old.get_base_color() if old is not None and old.has_base_color() else (1, 1, 1, 1)
+            if only is not None and not only(b): continue
+            mt = Material(old) if old is not None else Material("ped")
+            mt.set_base_color((c[0], c[1], c[2], 1)); gn.set_geom_state(i, st.set_attrib(MaterialAttrib.make(mt)))
+    np_.set_shader_input("tint", (1, 1, 1, 1))
+
+
 class Ped(Person):
     """sidewalk walker: loops around a block, flees from danger, can speak ambient lines."""
     def __init__(self, game, loop, idx):
         self.loop = loop; self.seg = idx % len(loop); self.t = random.random()
         a = loop[self.seg]; b = loop[(self.seg + 1) % len(loop)]
         x = a[0] + (b[0] - a[0]) * self.t; y = a[1] + (b[1] - a[1]) * self.t
-        Person.__init__(self, game, "ana", x, y, 0.0, ped=True)
+        # v1.0.4: a mix of women and men; neither may look like ANA or DANIEL (see the ped styling in build_model)
+        Person.__init__(self, game, "daniel" if random.random() < 0.45 else "ana", x, y, 0.0, ped=True)
         self.speed = random.uniform(1.1, 1.6); self.flee = 0.0; self.dir = 1 if random.random() < 0.5 else -1
         self.talk_cd = random.uniform(2, 10)
         self.offset = random.uniform(-0.8, 0.8)

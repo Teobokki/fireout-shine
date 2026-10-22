@@ -162,7 +162,7 @@ def mesh(base,nx=40,nz=28):
             p=q@HEAD_R.T+HEAD_O; nw=n@HEAD_R.T
             V.append([round(float(t),5) for t in (*p,*nw,u,v)])
     return dict(nx=nx,nz=nz,v=V)
-jobs=[('heroine','skin_c'),('heroine_crop','skin_c_crop'),('heroine_bikini','skin_c_bikini'),('heroine_police','skin_c_police'),('daniel','skin_c_daniel'),('daniel_swim','skin_c_swim')]
+jobs=[('heroine','skin_c'),('heroine_crop','skin_c_crop'),('heroine_bikini','skin_c_bikini'),('heroine_police','skin_c_police'),('daniel','skin_c_daniel'),('daniel_swim','skin_c_swim'),('miyoyazu','skin_c_miyo')]
 for bam,skin in jobs:
     if len(sys.argv)>1 and bam not in sys.argv[1:]: continue
     dan=bam.startswith('daniel'); regs={}

@@ -170,11 +170,11 @@ class Arsenal:
 
     def refill(self):
         cost = 300
-        if self.g.cash < cost: self.g.toast("Not enough cash (¥300)"); return
+        if self.g.cash < cost: self.g.toast("Not enough cash (¥300)"); self.g.npc_say("shop_poor", who="店員"); return
         self.g.cash -= cost
         for w in WEAPONS:
             if w["ammo"]: self.ammo[w["id"]] = w["ammo"]
-        self.app.sfx("checkpoint", 0.6); self.g.toast("KAZAN SUPPLY: ammo refilled  -¥300", 2.5)
+        self.app.sfx("checkpoint", 0.6); self.g.toast("KAZAN SUPPLY: ammo refilled  -¥300", 2.5); self.g.npc_say("shop", who="KAZAN SUPPLY 店員")
 
     # ---------------------------------------------------------------- attack
     def over_gui(self):

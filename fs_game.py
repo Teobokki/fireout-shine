@@ -15,9 +15,11 @@ from fs_ai import TrafficAI, RacerAI, PoliceAI, ResponderAI, graph_path, wrap
 PAINTS = [("RED", (0.78, 0.04, 0.06)), ("BLUE", (0.05, 0.18, 0.75)), ("YELLOW", (0.95, 0.78, 0.05)), ("GREEN", (0.05, 0.6, 0.18)),
           ("BLACK", (0.03, 0.03, 0.035)), ("WHITE", (0.9, 0.9, 0.92)), ("ORANGE", (1.0, 0.38, 0.03)), ("PURPLE", (0.42, 0.08, 0.75)),
           ("SAKURA", (0.95, 0.35, 0.62)), ("TEAL", (0.05, 0.62, 0.66))]
-NAMES = {"ana": "ANA", "daniel": "DANIEL"}
+NAMES = {"ana": "ANA", "daniel": "DANIEL", "miyo": "MIYOYAZU"}
+CREW = ("ana", "daniel", "miyo")
 from fs_game_banter import BANTER
 from fs_weapons import Arsenal, SHOP_POS, W as WEAPON
+from fs_miyo import Miyo
 
 
 CASH_CAP = 100_000_000_000        # total cash can never exceed ¥100,000,000,000
@@ -38,7 +40,12 @@ class Game:
         except (TypeError, ValueError): self.cash = 2500
         self.tokens = set(tuple(t) for t in sd.get("tokens", []))
         self.best = dict(sd.get("best", {})); self.cars_cfg = dict(sd.get("cars", {})); self.cam_cams = dict(sd.get("speedcams", {}))
-        self.active = sd.get("active", "ana") if sd.get("active") in ("ana", "daniel") else "ana"
+        self.active = sd.get("active", "ana") if sd.get("active") in CREW else "ana"
+        self.mate = sd.get("mate") if sd.get("mate") in CREW and sd.get("mate") != self.active else ("daniel" if self.active != "daniel" else "ana")
+        self.tsunami = None; self.builds = None; self.eating = None; self.drunk = float(sd.get("drunk", 0.0) or 0.0)
+        self.photos = [p for p in sd.get("photos", []) if isinstance(p, str)]; self.ledger = [tuple(x) for x in sd.get("ledger", [])][-30:]
+        self.owned = sd.get("owned") if isinstance(sd.get("owned"), dict) else {}; self.news = [tuple(x) for x in sd.get("news", [])][-10:]
+        self.misto = sd.get("misto") if isinstance(sd.get("misto"), dict) else {}
         self.cars = []; self.peds = []; self.police = []; self.paused = False; self.overlay = None; self.phone = None
         self.heat = 0; self.heat_t = 0.0; self.escape_t = 0.0; self.bust_t = 0.0; self.activity = None; self.cam_mode = 0
         self.vb = {}; self.cam_yaw = D.SPAWN[2] - 90; self.cam_pos = None; self.shake = 0.0; self.district = None
@@ -46,11 +53,21 @@ class Game:
         self.waypoint = None; self.stuck_t = 0.0; self.pop_t = 0.0; self.health_regen = 0.0; self.cinematic = 0.0
         self.garage = None; self.cp_np = None; self._cam_cd = 0.0; self.lb_on = False; self.lb_k = 0.0
         self.outfit = sd.get("outfit", "default") if sd.get("outfit") in ("default", "crop", "bikini", "police") else "default"
+        so = sd.get("outfits") if isinstance(sd.get("outfits"), dict) else {}
+        self.outfits = {"ana": self.outfit, "daniel": so.get("daniel", "default") if isinstance(so.get("daniel"), str) else "default",
+                        "miyo": so.get("miyo", "default") if isinstance(so.get("miyo"), str) else "default"}
         self.home = None
         self.camapp = None          # v1.0.3: phone CAMERA app state (selfie / rear)
         self.player_kind = sd.get("car", "gts") if sd.get("car") in PLAYER_CARS else "gts"
         x, y, h = D.SPAWN
-        self.chars = {"ana": Person(self, "ana", x - 1.0, y - 4.0, 180), "daniel": Person(self, "daniel", x + 1.0, y - 4.2, 180)}
+        self.chars = {"ana": Person(self, "ana", x - 1.0, y - 4.0, 180), "daniel": Person(self, "daniel", x + 1.0, y - 4.2, 180),
+                      "miyo": Person(self, "miyo", x + 0.0, y - 5.0, 180)}
+        for k, p in self.chars.items(): self.bench(p, k not in (self.active, self.mate))     # v1.0.4: two on screen, the third waits off-screen
+        self.miyo = Miyo(self)
+        from fs_signals import Signals
+        self.signals = Signals(self)
+        from fs_laptop import Laptop
+        self.laptop = Laptop(self)
         self.pcar = None
         self.own = self.spawn_car(self.player_kind, x, y, h, role="player", parked=True); self.own.owned = True
         self.time_scale = 1.0; self.tod = 14.5
@@ -72,6 +89,11 @@ class Game:
         if kind == "taxi" and role != "player": paint = (0.95, 0.75, 0.1)
         c = Car(self, kind, x, y, h, paint, cfg.get("plate", plate), parked, role)
         self.cars.append(c)
+        if kind == "taxi" and role == "taxi":          # v1.0.4: see-through taxi glass + the JP TAXI driver at the wheel
+            try:
+                from fs_miyo import taxi_glass, make_taxi_driver
+                taxi_glass(c, self.app); d = make_taxi_driver(self); d.seat(c, 1); c.taxi_driver = d
+            except Exception as e: self.app.log_error(e)
         return c
 
     def remove_car(self, c):
@@ -88,14 +110,22 @@ class Game:
     def walkers(self):
         out = list(self.peds)
         for p in self.chars.values():
-            if p.in_car is None: out.append(p)
+            if p.in_car is None and not getattr(p, "benched", False): out.append(p)
         return out
 
     def me(self):
         return self.chars[self.active]
 
     def buddy(self):
-        return self.chars["daniel" if self.active == "ana" else "ana"]
+        return self.chars[self.mate]
+
+    def bench(self, p, on):
+        """the crew member not in the active pair is parked off-screen (hidden, not simulated)"""
+        p.benched = on
+        if on:
+            if p.in_car is not None: p.unseat(p.in_car.x, p.in_car.y, 0)
+            p.np.hide(); p.np.set_pos(0, 0, -50)
+        else: p.np.show()
 
     def player_pos(self):
         if self.pcar: return self.pcar.x, self.pcar.y
@@ -126,17 +156,21 @@ class Game:
         keep = {self.own, self.pcar, self.taxi, self.medic}
         for c in list(self.cars):
             if c in keep or c in self.police or getattr(c, "racer", False): continue
-            if math.hypot(c.x - px, c.y - py) > 280: self.remove_car(c)
+            if math.hypot(c.x - px, c.y - py) > 175: self.remove_car(c)
         for p in list(self.peds):
             if math.hypot(p.x - px, p.y - py) > 140: p.destroy(); self.peds.remove(p)
         q = self.app.settings.get("quality", 2)
-        want = {0: 10, 1: 16, 2: 22}.get(q, 16)
+        # v1.0.4 TRAFFIC DENSITY (LOW / NORMAL / HIGH, default HIGH): a busy city - spawned around you out of view, despawned far away
+        dens = {"low": 1.0, "normal": 2.0, "high": 4.0}.get(self.app.settings.get("traffic", "high"), 4.0)
+        want = int({0: 12, 1: 20, 2: 26}.get(q, 20) * dens)
         traffic = [c for c in self.cars if isinstance(c.ai, TrafficAI)]
-        for _ in range(4):
+        nodes_ = [n for n, (x_, y_) in w.nodes.items() if abs(x_ - px) < 140 and abs(y_ - py) < 140] or list(w.nodes)
+        seed = len(traffic) < want * 0.4      # first fill (load / teleport / taxi skip): fill the streets straight away
+        for _ in range(40 if seed else (12 if dens > 1.5 else 4)):
             if len(traffic) >= want: break
-            node = random.choice(list(w.nodes)); nx_, ny_ = w.nodes[node]
+            node = random.choice(nodes_); nx_, ny_ = w.nodes[node]
             d = math.hypot(nx_ - px, ny_ - py)
-            if d < 90 or d > 250 or (self.in_view(nx_, ny_) and d < 170): continue
+            if d > 140 or (not seed and (d < 40 or (self.in_view(nx_, ny_) and d < 95))) or (seed and d < 20): continue
             nb = random.choice(w.adj[node]); bx, by = w.nodes[nb]
             dx, dy = bx - nx_, by - ny_; L = math.hypot(dx, dy); dx /= L; dy /= L
             x, y = nx_ + dx * 14 - dy * 3.0, ny_ + dy * 14 + dx * 3.0
@@ -163,13 +197,13 @@ class Game:
             self.peds.append(p)
 
     # ================================================================ input
-    KEYS = ("f", "e", "c", "r", "h", "m", "t", "escape", "q", "f2", "arrow_up", "enter", "j", "space", "1", "2", "3")
+    KEYS = ("f", "e", "c", "r", "h", "m", "t", "escape", "q", "f2", "arrow_up", "enter", "j", "space", "1", "2", "3", "b", "n", "l")
 
     def bind_keys(self):
         a = self.app
         for k, f in zip(self.KEYS, (self.key_f, self.key_e, self.key_c, self.key_r, self.key_h, self.toggle_map, self.toggle_phone,
                                     self.key_esc, self.switch_char, self.switch_char, self.key_up, self.key_enter, self.repair_car, self.key_space,
-                                    lambda: self.key_num(0), lambda: self.key_num(1), lambda: self.key_num(2))):
+                                    lambda: self.key_num(0), lambda: self.key_num(1), lambda: self.key_num(2), self.key_b, self.key_n, self.key_l)):
             a.accept(k, f)
 
     def unbind(self):
@@ -196,7 +230,18 @@ class Game:
     def key_up(self):
         if self.pcar is None and self.ride is None and not self.blocked() and self.phone is None: self.toggle_phone()
 
+    def key_b(self):
+        if self.miyo.ui is not None and self.overlay is self.miyo.ui: return
+        self.miyo.open_build()
+
+    def key_n(self):
+        if self.miyo.ui is not None and self.overlay is self.miyo.ui and getattr(self.miyo.ui, "kind", "") == "tsunami": self.miyo.close_ui(); return
+        if self.overlay is not None and self.tsunami is None: return
+        self.miyo.key_tsunami()
+
     def key_num(self, k):
+        if self.miyo.ui is not None and self.overlay is self.miyo.ui and getattr(self.miyo.ui, "kind", "") == "tsunami":
+            self.miyo.start_tsunami(("small", "medium", "big")[k]); return
         if self.camapp and self.camapp.get("picker"): self.cam_set_expr(("smile", "neutral", "frown")[k])
 
     def key_space(self):
@@ -211,6 +256,7 @@ class Game:
     def repair_car(self):
         """instantly repair the current car (paint + plate from FRGARAGE stay as they are)"""
         c = self.pcar
+        if self.typing(): return
         if c is None: self.toast("Get in a car to repair it"); return
         c.damage = 0.0; c.dead = False; c.stuck_t = 0.0
         if hasattr(c, "health"): c.health = 100.0
@@ -229,16 +275,34 @@ class Game:
         self.app.task_mgr.do_method_later(0.9, lambda t: root.remove_node(), "fs-repairfx")
         self.app.sfx("checkpoint", 0.6); self.app.sfx("door", 0.3); self.toast("Car repaired  -  good as new")
 
+    def key_l(self):
+        if self.typing(): return
+        self.laptop.toggle()
+
+    def typing(self):
+        """the BUILD text box has focus: letter keys type, they don't honk / switch camera / repair"""
+        if getattr(self, "laptop", None) is not None and self.laptop.ui is not None: return True
+        if self.overlay is not None and getattr(self.overlay, "is_misto", False): return True
+        if self.camapp and self.camapp.get("misto"): return True
+        m = getattr(self, "miyo", None)
+        return m is not None and m.ui is not None and self.overlay is m.ui and hasattr(m.ui, "ent")
+
     def key_c(self):
+        if self.typing(): return
+        if self.ride: self.ride_cam_toggle(); return
         self.cam_mode = (self.cam_mode + 1) % 3
 
     def key_h(self):
+        if self.typing(): return
         self.app.sfx("horn", 0.7)
         if self.pcar:
             for p in self.peds:
                 if math.hypot(p.x - self.pcar.x, p.y - self.pcar.y) < 15: p.flee = 2.0; p.flee_from = (self.pcar.x, self.pcar.y)
 
     def key_esc(self):
+        if self.laptop.ui is not None or self.laptop.phase is not None:
+            if getattr(self.laptop, "dlg", None): self.laptop.dlg.destroy(); self.laptop.dlg = None; return
+            self.laptop.close(); return
         if self.camapp: self.close_camera(); return
         if self.phone: self.toggle_phone(); return
         if self.home:
@@ -284,7 +348,8 @@ class Game:
             return
         if self.blocked(): return
         m = self.near_marker()
-        if m: self.start_activity(m["id"])
+        if m: self.start_activity(m["id"]); return
+        if getattr(self, "bar", None) is not None and self.bar.near(): self.bar.open_menu()
 
     # ================================================================ car enter / exit / jack / switch
     def enter_car(self, c):
@@ -295,6 +360,7 @@ class Game:
             if c.kind == "police": self.add_heat(2, "Stole a police car!")
             elif any(math.hypot(pc.x - c.x, pc.y - c.y) < 60 for pc in self.police): self.add_heat(1, "Carjacking witnessed!")
             if c in self.police: self.police.remove(c)
+        if getattr(c, "taxi_driver", None) is not None: c.taxi_driver.destroy(); c.taxi_driver = None
         c.ai = None; c.driver = "player"; c.role = "player"; c.wake(); c.lights_on = False
         self.pcar = c; self.cam_pos = None
         self.me().seat(c, 1); self.buddy().seat(c, -1)
@@ -319,13 +385,32 @@ class Game:
         if hasattr(self, "arsenal"): self.arsenal.unequip()
         at_home = self.home is not None and self.home.get("mode") == "room"
         if (self.blocked() and not at_home) or self.ride: return
-        self.active = "daniel" if self.active == "ana" else "ana"
+        self.select_char(CREW[(CREW.index(self.active) + 1) % len(CREW)], _checked=True)
+
+    def select_char(self, who, _checked=False):
+        """v1.0.4 crew of three. Switching to the follower swaps who leads; switching to the benched one brings them in
+        exactly where the current character stands (that character steps out and waits off-screen)."""
+        if not _checked:
+            if self.camapp or who == self.active: return
+            if hasattr(self, "arsenal"): self.arsenal.unequip()
+            at_home = self.home is not None and self.home.get("mode") == "room"
+            if (self.blocked() and not at_home) or self.ride: return
+        old = self.me()
+        if who == self.mate:
+            self.mate = self.active; self.active = who
+        else:
+            new = self.chars[who]; self.bench(new, False)
+            new.x, new.y, new.h = old.x, old.y, old.h
+            if self.home is not None: new.sync()
+            self.bench(old, True); self.active = who; new.sync()
+            if self.camapp is None and getattr(new, "expression", "neutral") != "neutral": new.set_expression("neutral")
         if self.pcar:
             self.me().seat(self.pcar, 1); self.buddy().seat(self.pcar, -1)
         else:
             self.cam_yaw = self.me().h; self.cam_pos = None
         self.cinematic = 0.8
         self.toast("Now playing as %s" % NAMES[self.active]); self.app.sfx("switch", 0.7)
+        if self.miyo.ui is not None and self.overlay is self.miyo.ui: self.miyo.close_ui()
         self.update_portraits()
         if self.phone: self.phone_screen(getattr(self.phone, "which", "home"))     # the phone swaps with the character
 
@@ -449,6 +534,7 @@ class Game:
                 rc.ai = RacerAI(self, rc, pts * laps, skill=0.86 + 0.06 * k)
                 rc.race = {"cp": 0, "lap": 1, "done": None, "name": nm}
                 act["racers"].append(rc)
+            if act["racers"]: self.npc_say("rival", random.choice(act["racers"]))     # rival trash talk (Japanese + English)
         self.activity = act
         self.cp_np = self.app.render.attach_new_node("cp")
         cm = CardMaker("cp"); cm.set_frame(-8, 8, -16, 0)
@@ -576,6 +662,9 @@ class Game:
         if self.heat > old:
             self.app.sfx("heat", 0.6)
             if why: self.toast(why)
+            if self.heat >= 2:          # v1.0.4: NEON TOKYO NEWS covers your police chases (IX NAVI browser)
+                if self.news and self.news[-1][0] == "wanted" and time.time() - self.news[-1][2] < 300: self.news[-1] = ("wanted", self.heat, self.news[-1][2])
+                else: self.news.append(("wanted", self.heat, time.time()))
 
     def make_cop(self, c):
         if c not in self.police: self.police.append(c)
@@ -596,6 +685,10 @@ class Game:
                 self.escape_t += dt
                 if self.escape_t > 5.0 + self.heat * 2.0:
                     self.heat = 0; self.escape_t = 0; self.toast("You lost them!"); self.app.sfx("win", 0.5)
+            self._cop_cd = getattr(self, "_cop_cd", 2.0) - dt
+            if self._cop_cd <= 0:
+                near = [c for c in self.police if c is not self.pcar and math.hypot(c.x - px, c.y - py) < 40]
+                if near: self.npc_say("police", min(near, key=lambda c: math.hypot(c.x - px, c.y - py))); self._cop_cd = random.uniform(6, 10)
             close = any(math.hypot(c.x - px, c.y - py) < 7.5 for c in self.police if c is not self.pcar)
             sp = self.pcar.speed if self.pcar else 0.0
             if close and sp < 2.5: self.bust_t += dt
@@ -642,6 +735,7 @@ class Game:
         if self.activity: self.activity = None; self.big.setText("")
         if self.cp_np: self.cp_np.remove_node(); self.cp_np = None
         self.death_screen("BUSTED", "Fine ¥%s  -  released at home" % format(fine, ",")); self.app.sfx("busted", 0.8)
+        self.npc_say("busted", who="警察官")
         if self.pcar: self.exit_car(force=True)
         hx, hy = D.HOME_POS[0] + 1.0, D.HOME_POS[1] - 2.0      # released: back home
         self.me().x, self.me().y = hx, hy; self.buddy().x, self.buddy().y = hx + 1.5, hy; self.cam_pos = None
@@ -705,6 +799,7 @@ class Game:
         f = (1 if self.down("w", "arrow_up", "v_up") else 0) - (1 if self.down("s", "arrow_down", "v_down") else 0)
         s = (1 if self.down("d", "arrow_right", "v_right") else 0) - (1 if self.down("a", "arrow_left", "v_left") else 0)
         run = self.down("shift", "v_nitro"); sp = 0.0
+        if getattr(self, "eating", None) is not None and me is self.me(): f = s = 0; run = False      # v1.0.4: stand still while eating
         if self.arsenal.aiming and not self.blocked():
             self.cam_yaw -= s * 110 * dt
             mw = self.app.mouseWatcherNode
@@ -765,26 +860,49 @@ class Game:
 
     # ================================================================ chatter / subtitles
     def say_line(self, p, group=None):
+        """v1.0.4: most pedestrians speak Japanese (English translation underneath); a few tourists stay English-only."""
         if not self.app.settings.get("chatter", True): return
         idx = self.app.voice_index
         if not idx: return
         dist = D.district_at(p.x, p.y)
+        from fs_lines import TOURIST
         if group is None:
-            pool = [("ambient", e) for e in idx.get("ambient", []) if e["district"] in ("*", dist)] + \
-                   [("ja", e) for e in idx.get("ja", []) if e["district"] in ("*", dist)]
+            ja = [("ja", e) for e in idx.get("ja", []) if e["district"] in ("*", dist)]
+            en = [("ambient", e) for e in idx.get("ambient", []) if e["district"] in ("*", dist)
+                  and int(e["file"].split("_")[1].split(".")[0]) in TOURIST]
+            pool = en if (en and random.random() < 0.12) else ja
         else:
+            if idx.get("ja_" + group) and random.random() < 0.85: return self.npc_say(group, p)
             pool = [(group, e) for e in idx.get(group, [])]
         if not pool: return
         g, e = random.choice(pool)
         px, py = self.player_pos(); d = math.hypot(p.x - px, p.y - py)
         self.app.voice(e["file"], max(0.25, 1.0 - d / 25.0))
-        self.bubble(p, e["text"] + (("\n" + e["en"]) if g == "ja" else ""), g == "ja")
+        self.bubble(p, e["text"], e.get("en") if g == "ja" else None)
 
-    def bubble(self, p, txt, jp=False):
+    def npc_say(self, group, p=None, who=None, vol=0.9):
+        """Japanese NPC line (+ English underneath): a speech bubble over p, or a two-line subtitle with a speaker name"""
+        e = random.choice(self.app.voice_index.get("ja_" + group) or [None])
+        if e is None: return
+        if self.app.settings.get("chatter", True): self.app.voice(e["file"], vol)
+        if p is not None: self.bubble(p, e["text"], e["en"])
+        else: self.subtitle(("%s：" % who if who else "") + e["text"], 4.0, en=e["en"])
+
+    def bubble(self, p, txt, en=None):
+        """speech bubble: Japanese line on top, the English translation underneath in smaller text"""
         if not self.app.settings.get("subtitles", True): return
-        tn = TextNode("bub"); tn.set_text(txt); tn.set_align(TextNode.A_center); tn.set_wordwrap(16)
-        f = self.app.jpfont if jp else U.FONT_PLAIN
+        from panda3d.core import TextPropertiesManager, TextProperties
+        tpm = TextPropertiesManager.get_global_ptr()
+        if not tpm.has_properties("en"):
+            tp = TextProperties(); tp.set_text_scale(0.72); tp.set_text_color(0.85, 0.92, 1.0, 1)
+            if U.FONT_PLAIN: tp.set_font(U.FONT_PLAIN)
+            tpm.set_properties("en", tp)
+        tn = TextNode("bub"); tn.set_align(TextNode.A_center)          # wrapped by hand: kinsoku rules for Japanese
+        f = self.app.jpfont if en is not None else U.FONT_PLAIN
         if f: tn.set_font(f)
+        import textwrap
+        body = U.jwrap(txt, 15.0) if en is not None else "\n".join(textwrap.wrap(txt, 26))
+        tn.set_text(body + (("\n\1en\1" + "\n".join(textwrap.wrap(en, 34)) + "\2") if en else ""))
         tn.set_card_color(0.05, 0.03, 0.1, 0.78); tn.set_card_as_margin(0.4, 0.4, 0.25, 0.2); tn.set_text_color(1, 1, 1, 1)
         if getattr(p, "bub", None) and not p.bub.is_empty(): p.bub.remove_node()
         b = p.np.attach_new_node(tn); b.set_z(2.35); b.set_scale(0.2); b.set_billboard_point_eye(); b.set_light_off(); b.set_bin("fixed", 50)
@@ -804,13 +922,16 @@ class Game:
             self.app.voice("banter_%02d.wav" % k, 0.8)
             self.subtitle("%s: %s" % (NAMES[who], line), 4.0)
 
-    def subtitle(self, txt, dur=3.5):
+    def subtitle(self, txt, dur=3.5, en=None):
+        """two-line subtitle: Japanese on top, English translation underneath (smaller); plain English lines use one line"""
         if not self.app.settings.get("subtitles", True): return
-        self.sub.setText(txt); self.sub_t = dur
+        self.sub.setText(U.jwrap(txt, 30.0) if en else txt); self.sub_t = dur
+        self.sub["font"] = self.app.jpfont if en else U.FONT_PLAIN
+        self.sub_en.setText(en or "")
 
     # ================================================================ phone (EX IX G9)
     def accent(self):
-        return (0.2, 0.55, 1.0, 1) if self.active == "ana" else (0.45, 0.95, 0.3, 1)
+        return {"ana": (0.2, 0.55, 1.0, 1), "miyo": (1.0, 0.55, 0.1, 1)}.get(self.active, (0.45, 0.95, 0.3, 1))
 
     def toggle_phone(self):
         if self.phone:
@@ -822,7 +943,7 @@ class Game:
         """EX IX G9 phone: ANA's blue one with the cracked screen, DANIEL's apple-green one. Anchored bottom-right in
         aspect2d (scales with window height), so it looks the same at 1024x576, 1280x720 and 1920x1080."""
         if self.phone: self.phone.destroy()
-        acc = self.accent(); who = self.active if self.active in ("ana", "daniel") else "ana"
+        acc = self.accent(); who = self.active if self.active in CREW else "ana"
         T = lambda n: Filename.from_os_specific(os.path.join(self.app.BASE, "assets", "tex", n)).get_fullpath()
         PH = 1.22; k = PH / 1170.0; PW = 585 * k                 # phone art is 585x1170 px, screen at (43,43) 479x1054
         sx0, sy1 = (43 - 292.5) * k, (585 - 43) * k; sw, sh = 479 * k, 1054 * k
@@ -838,15 +959,17 @@ class Game:
         def btn(lbl, fn, y, w=0.2):
             U.button(root, lbl, (cx, top - y), fn, w=w, h=0.042, scale=0.032, edge=acc); items.append((lbl, fn))
         if which == "home":
-            for n, (ic, lbl, fn) in enumerate((("phone_icon_contacts.png", "Contacts", lambda: self.phone_screen("contacts")),
-                                              ("phone_icon_taxi.png", "JP TAXI", lambda: self.phone_screen("taxi")),
-                                              ("phone_icon_camera.png", "CAMERA", self.open_camera))):
-                x = cx + (n - 1) * 0.15
-                b = DirectButton(parent=root, image=T(ic), image_scale=0.062, relief=None, pos=(x, 0, top - 0.42), command=fn)
+            import fs_misto
+            apps = [("phone_icon_contacts.png", "Contacts", lambda: self.phone_screen("contacts")), ("phone_icon_taxi.png", "JP TAXI", lambda: self.phone_screen("taxi")),
+                    ("phone_icon_camera.png", "CAMERA", self.open_camera), ("ix_icon_misto2.png", "MISTO 2", lambda: fs_misto.open_app(self))]
+            if hasattr(self, "online_app"): apps.append(("ix_icon_online.png", "ONLINE", self.online_app))
+            for n, (ic, lbl, fn) in enumerate(apps):
+                x = cx + ((n % 3) - 1) * 0.15; yo = (n // 3) * 0.17
+                b = DirectButton(parent=root, image=T(ic), image_scale=0.062 if ic.startswith("phone") else 0.05, relief=None, pos=(x, 0, top - 0.42 - yo), command=fn)
                 b.set_transparency(TransparencyAttrib.M_alpha)
-                U.text(root, lbl, (x, top - 0.52), 0.027, font=U.FONT_PLAIN); items.append((lbl, fn))
-            btn("MAP", lambda: (self.toggle_phone(), self.toggle_map()), 0.70)
-            btn("CLOSE", self.toggle_phone, 0.81)
+                U.text(root, lbl, (x, top - 0.52 - yo), 0.027, font=U.FONT_PLAIN); items.append((lbl, fn))
+            btn("MAP", lambda: (self.toggle_phone(), self.toggle_map()), 0.76)
+            btn("CLOSE", self.toggle_phone, 0.86)
         elif which == "contacts":
             W("CONTACTS", 0.30, 0.045, fg=acc, font=U.FONT)
             btn("Emergency Services  119", self.call_emergency, 0.42, w=0.23)
@@ -892,12 +1015,35 @@ class Game:
             except Exception: continue
         d = os.path.join(os.path.dirname(self.app.save_path()), "Pictures"); os.makedirs(d, exist_ok=True); return d
 
-    def open_camera(self):
+    # ---- v1.0.4: the photos the game itself saved (PHOTOS app, KIRAKIRA feed, DELETE)
+    def add_photo(self, path):
+        path = os.path.abspath(path)
+        if path not in self.photos: self.photos.append(path)
+        self.save()
+
+    def photo_list(self):
+        return [p for p in self.photos if os.path.exists(p)]
+
+    def delete_photo(self, path):
+        """delete one selfie - only a PNG this game saved itself into Pictures/FIREOUT SHINE, nothing else"""
+        path = os.path.abspath(path)
+        if path not in self.photos: return False
+        try:
+            ok_dir = os.path.normcase(os.path.dirname(path)) == os.path.normcase(os.path.abspath(self.pictures_dir()))
+            if ok_dir and path.lower().endswith(".png") and os.path.isfile(path): os.remove(path)
+        except Exception as e: self.app.log_error(e)
+        self.photos = [p for p in self.photos if p != path]
+        m = getattr(self, "misto", None)
+        if isinstance(m, dict): m["stories"] = [p for p in m.get("stories", []) if p != path]
+        self.save(); self.app.sfx("click", 0.6)
+        return not os.path.exists(path)
+
+    def open_camera(self, misto=False):
         if self.phone: self.phone.destroy(); self.phone = None
         if self.ride or (self.blocked() and not self.home_roam()): return
         if hasattr(self, "arsenal"): self.arsenal.unequip()
         me = self.me()
-        self.camapp = {"mode": "rear" if self.pcar else "selfie", "t": 0.0, "ang": 0.0, "pitch": 0.0, "flash": 0.0, "expr": "neutral"}
+        self.camapp = {"mode": "rear" if self.pcar else "selfie", "t": 0.0, "ang": 0.0, "pitch": 0.0, "flash": 0.0, "expr": "neutral", "misto": misto, "lens": "none"}
         me.set_expression("neutral")
         if self.home: self.home_prompt_off()
         self.cam_prop(); self.cam_ui(); self.app.sfx("click", 0.6); self.refresh_buttons()
@@ -911,7 +1057,7 @@ class Game:
         hand = getattr(me, "handR", None)
         if hand is None or hand.is_empty(): return
         from fs_geom import MB
-        b = MB("phone_prop"); col = (0.12, 0.35, 0.95, 1) if me.who == "ana" else (0.45, 0.85, 0.25, 1)
+        b = MB("phone_prop"); col = {"ana": (0.12, 0.35, 0.95, 1), "miyo": (1.0, 0.5, 0.08, 1)}.get(me.who, (0.45, 0.85, 0.25, 1))
         b.box(-0.036, -0.005, -0.075, 0.036, 0.005, 0.075, col)
         b.box(-0.032, 0.0052, -0.07, 0.032, 0.0062, 0.07, (0.3, 0.55, 1.2, 1))           # screen (faces the character)
         b.box(0.014, -0.0065, 0.045, 0.028, -0.005, 0.064, (0.05, 0.05, 0.06, 1))         # lens
@@ -931,7 +1077,9 @@ class Game:
             DirectFrame(parent=o, frameColor=(1, 1, 1, 0.12), frameSize=(-ar, ar, -0.002, 0.002), pos=(0, 0, k * 0.333))
             DirectFrame(parent=o, frameColor=(1, 1, 1, 0.12), frameSize=(-0.002, 0.002, -1, 1), pos=(k * ar / 3, 0, 0))
         sel = ca["mode"] == "selfie"
-        U.text(o, "CAMERA", (0, 0.88), 0.05, fg=acc)
+        if ca.get("misto"):
+            import fs_misto; fs_misto.cam_extras(self, o)
+        else: U.text(o, "CAMERA", (0, 0.88), 0.05, fg=acc)
         U.text(o, ("SELFIE" if sel else "PHOTO") + "   -   EX IX G9", (0, 0.82), 0.032, font=U.FONT_PLAIN, shadow=(0, 0, 0, 0.8))
         T = lambda n: Filename.from_os_specific(os.path.join(self.app.BASE, "assets", "tex", n)).get_fullpath()
         # big round camera-style shutter, centred at the bottom; click it or press Space / Enter
@@ -939,7 +1087,7 @@ class Game:
                                           image=(T("cam_shutter.png"), T("cam_shutter_down.png"), T("cam_shutter_hover.png"), T("cam_shutter.png")),
                                           image_scale=0.115, frameSize=(-0.115, 0.115, -0.115, 0.115), rolloverSound=None, clickSound=None)
         sh.set_transparency(TransparencyAttrib.M_alpha)
-        U.text(o, "TAKE PHOTO", (0, -0.905), 0.045, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9))
+        U.text(o, "SNAP" if ca.get("misto") else "TAKE PHOTO", (0, -0.905), 0.045, fg=(1, 1, 1, 1), shadow=(0, 0, 0, 0.9))
         U.text(o, "Space / Enter", (0, -0.955), 0.026, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.8), shadow=(0, 0, 0, 0.9))
         U.button(o, "BACK", (-0.78, -0.76), self.close_camera, w=0.13, h=0.05, scale=0.036, hint="Esc")
         U.button(o, "FLIP", (-0.40, -0.76), self.cam_flip, w=0.13, h=0.05, scale=0.036, edge=acc, hint="R")
@@ -990,7 +1138,7 @@ class Game:
         if not ca: return
         for k in ("prop",):
             if ca.get(k): ca[k].remove_node()
-        for k in ("ui", "flash_np"):
+        for k in ("ui", "flash_np", "lens_np"):
             if ca.get(k): ca[k].destroy()
         me = self.me(); me.arm_pose = None; me.set_grip(False, False); me.np.show(); me.set_expression("neutral")
         self.camapp = None; self.cam_pos = None; self.app.camLens.set_fov(65)
@@ -1004,7 +1152,10 @@ class Game:
         nm = "%s_%s.png" % ("selfie" if ca["mode"] == "selfie" else "photo", time.strftime("%Y%m%d_%H%M%S"))
         path = None
         try:
-            d = self.pictures_dir(); path = os.path.join(d, nm)
+            if ca.get("misto"):
+                import fs_misto; d = fs_misto.snap_dir(self); nm = "snap_" + time.strftime("%Y%m%d_%H%M%S") + ".png"
+            else: d = self.pictures_dir()
+            path = os.path.join(d, nm)
             k = 1
             while os.path.exists(path): path = os.path.join(d, nm[:-4] + "_%d.png" % k); k += 1
             a.render2d.hide()                               # no HUD / viewfinder in the picture
@@ -1019,11 +1170,21 @@ class Game:
         ca["flash_np"].set_transparency(TransparencyAttrib.M_alpha); ca["flash"] = 0.35
         ca["last"] = path if ok else None
         self.app.sfx("click", 0.9)
+        if ok and ca.get("misto"):
+            if ca.get("flash_np"): ca["flash_np"].destroy(); ca["flash_np"] = None
+            import fs_misto; fs_misto.after_shot(self, path); return
+        if ok: self.add_photo(path)
         self.toast(("Saved  -  Pictures/FIREOUT SHINE/%s" % os.path.basename(path)) if ok else "Couldn't save the photo", 3.0)
 
     def update_camapp(self, dt):
         ca = self.camapp
         if not ca: return
+        self._update_camapp(dt)
+        if self.camapp and self.camapp.get("misto"):
+            import fs_misto; fs_misto.track_lens(self)      # after the selfie camera has moved this frame
+
+    def _update_camapp(self, dt):
+        ca = self.camapp
         ca["t"] += dt; t = ca["t"]; me = self.me(); cam = self.app.camera; lens = self.app.camLens
         if ca.get("flash_np"):
             ca["flash"] -= dt; f = max(0.0, ca["flash"] / 0.35)
@@ -1042,8 +1203,8 @@ class Game:
         if ca["mode"] == "selfie":
             ca["ang"] = max(-55, min(55, ca["ang"] + s * 50 * dt)); ca["pitch"] = max(-0.25, min(0.35, ca["pitch"] + v * 0.4 * dt))
             r = math.radians(me.h + 14 + ca["ang"]); fx, fy = -math.sin(r), math.cos(r)
-            d = 0.92 if me.who == "ana" else 1.0; cz = face + 0.16 + ca["pitch"]
-            cam.set_pos(me.x + fx * d, me.y + fy * d, cz); cam.look_at(me.x + fx0 * 0.05, me.y + fy0 * 0.05, face - 0.12); lens.set_fov(64)
+            d = 0.92 if me.who in ("ana", "miyo") else 1.0; cz = face + 0.16 + ca["pitch"]
+            cam.set_pos(me.x + fx * d, me.y + fy * d, cz); cam.look_at(me.x + fx0 * 0.05, me.y + fy0 * 0.05, face - 0.12 if not ca.get("misto") else face + 0.02); lens.set_fov(64)
             # pose: right arm out towards the lens holding the phone, left hand waves beside the face
             wv = math.sin(t * 7.0)
             me.set_arms((-78, 14), (-46 + 3 * wv, 30), (-14, 0), (-128 + 14 * wv, 4)); me.set_grip(True, False)
@@ -1069,7 +1230,7 @@ class Game:
         self.toggle_phone(); self.app.sfx("dial", 0.7)
         if self.medic: self.toast("An ambulance is already on its way"); return
         me = self.me()
-        self.subtitle("119 Operator: Emergency services, %s. Help is on the way." % NAMES[self.active], 4.0)
+        self.npc_say("op119", who="119番")
         x, y, h = self.offscreen_road_point(70, 140)
         c = self.spawn_car("ambulance", x, y, h, role="medic"); c.lights_on = True; c.driver = "ai"; c.asleep = False
         c.ai = ResponderAI(self, c, (me.x, me.y)); c.t0 = self.time
@@ -1096,9 +1257,9 @@ class Game:
                 c.done = True; me = self.me()
                 if me.health < 99:
                     me.health = 100.0; self.buddy().health = 100.0
-                    self.subtitle("Paramedic: All patched up, %s. Please drive safely!" % NAMES[self.active], 4.0)
+                    self.npc_say("paramedic", who="救急隊員")
                 else:
-                    self.subtitle("Paramedic: You look perfectly fine, %s... Was this a social call?" % NAMES[self.active], 4.5)
+                    self.npc_say("paramedic_fine", who="救急隊員")
                 self.app.do_method_later(6.0, lambda t: self.release_medic() or t.done, "medic-leave")
             elif kind == "medic" and not getattr(c, "done", False) and ai.arrived and d >= 14:
                 ai.arrived = False; ai.dest = (px, py); ai.route()
@@ -1128,9 +1289,11 @@ class Game:
     def board_taxi(self):
         c = self.taxi
         if self.phone: self.toggle_phone()
-        self.me().seat(c, -1); self.buddy().seat(c, -1); self.buddy().np.set_x(0.0); self.buddy().np.set_y(-1.1)
-        self.ride = {"car": c, "mode": "menu", "fare": 0}
-        self.app.sfx("door", 0.6)
+        self.me().seat(c, -1); self.buddy().seat(c, 1)                  # v1.0.4: both ride in the back seat
+        for p_, sx in ((self.me(), -0.36), (self.buddy(), 0.36)):
+            p_.np.set_x(sx); p_.np.set_y(-1.2); p_.set_arms((-14, 4), (-14, 4), (-60, 6), (-60, 6)); p_.set_grip(False, False)
+        self.ride = {"car": c, "mode": "menu", "fare": 0, "cam": "fp", "cam_k": 1.0, "t": 0.0}
+        self.app.sfx("door", 0.6); self.driver_say("hello", turn=True)
         self.taxi_menu()
 
     def taxi_menu(self):
@@ -1141,7 +1304,7 @@ class Game:
         for did, nm, jp, col in D.DISTRICTS:
             dests.append(("%s  %s" % (nm, jp), {"crossing": (0, 0), "akari": (-250, 250), "kurogane": (-250, -250),
                                                 "tower": (250, 250), "sakura": (250, -250), "beach": (460, 0)}[did]))
-        self.overlay = DirectFrame(parent=self.app.aspect2d, frameColor=(0, 0, 0, 0))
+        self.overlay = DirectFrame(parent=self.app.aspect2d, frameColor=(0, 0, 0, 0), pos=(-0.78, 0, 0.08))     # left: the driver stays in view
         U.panel(self.overlay, -0.6, 0.6, -0.78, 0.62, edge=(1.0, 0.8, 0.15, 1))
         U.text(self.overlay, "JP TAXI  -  WHERE TO?", (0, 0.52), 0.06, fg=(1.0, 0.8, 0.15, 1))
         for k, (nm, p) in enumerate(dests):
@@ -1154,9 +1317,102 @@ class Game:
         self.close_overlay(); c = self.ride["car"]
         d = math.hypot(p[0] - c.x, p[1] - c.y)
         fare = int(500 + 2.5 * d); self.ride.update(mode="riding", dest=p, fare=fare, t=0.0)
-        c.ai = ResponderAI(self, c, p, fast=False); c.ai.arrived = False
-        self.toast("Heading to %s - fare ¥%s  (ENTER to skip trip)" % (name.split("  ")[0], format(fare, ",")), 3.5)
+        c.ai = ResponderAI(self, c, p, fast=False); c.ai.arrived = False; c.ai.mul = 1.4      # v1.0.4: a bit too fast...
+        self.ride["bump_t"] = random.uniform(5.0, 11.0)
+        self.toast("Heading to %s - fare ¥%s  (ENTER to skip trip,  C: first person / rear view)" % (name.split("  ")[0], format(fare, ",")), 3.5)
+        self.driver_say("go"); self.ride["cam"] = "rear"          # v1.0.4: off we go - the camera eases out behind the taxi
         self.refresh_buttons()
+
+    # ---- v1.0.4 taxi: the driver speaks British English (pre-rendered offline with Piper), first-person back seat camera
+    def driver_say(self, key, extra=None, turn=False):
+        c = (self.ride or {}).get("car") or self.taxi; d = getattr(c, "taxi_driver", None) if c is not None else None
+        e = random.choice(self.app.voice_index.get("taxi_en_" + key) or [None])
+        if e is None: return
+        self.app.voice(e["file"], 1.0)
+        dur = 1.6
+        try:
+            import wave
+            with wave.open(os.path.join(self.app.BASE, "assets", "voice", e["file"])) as w: dur = w.getnframes() / float(w.getframerate())
+        except Exception: pass
+        self.subtitle("Driver: " + e["text"] + (("  " + extra) if extra else ""), max(3.0, dur + 1.5))
+        self._drv_talk = {"d": d, "t": 0.0, "dur": dur, "turn": turn}
+
+    def update_taxi_fx(self, dt):
+        """driver mouth + head turn while talking; first-person / rear ride camera"""
+        tk = getattr(self, "_drv_talk", None)
+        if tk is not None and tk["d"] is not None and not tk["d"].np.is_empty():
+            tk["t"] += dt; t = tk["t"]; d = tk["d"]
+            talking = t < tk["dur"]
+            d.set_chew(abs(math.sin(t * 11.0)) if talking else 0.0)
+            if tk["turn"]:
+                k = min(1.0, t / 0.4) if t < tk["dur"] + 0.4 else max(0.0, 1.0 - (t - tk["dur"] - 0.4) / 0.5)
+                d.np.set_h(25.0 * k * k * (3 - 2 * k))
+            if t > tk["dur"] + 1.0: d.set_chew(0.0); d.np.set_h(0); self._drv_talk = None
+        r = self.ride
+        if not r or r.get("car") is None: return
+        c = r["car"]; cam = self.app.camera
+        want = 1.0 if r.get("cam", "fp") == "fp" else 0.0
+        r["cam_k"] = r.get("cam_k", want) + (want - r.get("cam_k", want)) * min(1.0, dt * 2.5)
+        k = r["cam_k"]; e = k * k * (3 - 2 * k)
+        from panda3d.core import Point3
+        fp_pos = Point3(-0.3, -1.15, 1.06); fp_look = Point3(0.55, 3.0, 0.8)
+        rr_pos = Point3(0.9, -7.0, 2.7); rr_look = Point3(0.0, 0.2, 0.9)
+        pos = rr_pos + (fp_pos - rr_pos) * e; look = rr_look + (fp_look - rr_look) * e
+        cam.set_pos(self.app.render.get_relative_point(c.np, pos)); cam.look_at(self.app.render.get_relative_point(c.np, look))
+        self.app.camLens.set_fov(72 if e > 0.5 else 62)
+        me = self.me()
+        if e > 0.6: me.np.hide()          # the camera is in your own head: hide your body in first person
+        else: me.np.show()
+
+    def taxi_bump(self, c):
+        """comedic bump: the taxi clips the nearest car (or a kerb / bollard), the other car spins and honks, sparks + shake,
+        and the driver is back to full speed within a second, completely unbothered"""
+        f = c.fwd; best = None
+        for o in self.cars_near(c.x, c.y, 30):
+            if o is c or o is self.pcar: continue
+            dx, dy = o.x - c.x, o.y - c.y; fw = dx * f[0] + dy * f[1]
+            if fw > -4 and (best is None or math.hypot(dx, dy) < best[0]): best = (math.hypot(dx, dy), o)
+        side = random.choice((-1, 1))
+        c.h += side * random.uniform(5, 9); c.vx += f[1] * side * 2.5; c.vy -= f[0] * side * 2.5      # jolt, but no stopping
+        c.damage = min(getattr(c, "damage", 0.0) + 3.0, 40.0)
+        if best is not None:
+            o = best[1]
+            if getattr(o, "asleep", False): o.wake()
+            o.h += random.choice((-1, 1)) * random.uniform(35, 70); o.vx += f[0] * 4 - f[1] * side * 3; o.vy += f[1] * 4 + f[0] * side * 3
+            o.damage = min(getattr(o, "damage", 0.0) + 8.0, 60.0)
+            if hasattr(o, "ai") and o.ai is not None and hasattr(o.ai, "wait"): o.ai.wait = 2.5
+            near_ped = min(self.peds, key=lambda p: math.hypot(p.x - o.x, p.y - o.y)) if self.peds else None
+            if near_ped is not None and math.hypot(near_ped.x - o.x, near_ped.y - o.y) < 25: self.npc_say("crash_shout", near_ped)
+            else: self.npc_say("crash_shout", who="運転手（相手）")
+            x, y = (c.x + o.x) / 2, (c.y + o.y) / 2
+        else:
+            x, y = c.x + f[0] * 2.2 - f[1] * side * 0.9, c.y + f[1] * 2.2 + f[0] * side * 0.9
+        self.app.sfx("bump", 0.9); self.app.do_method_later(0.35, lambda t: self.app.sfx("horn", 0.8) or t.done, "bump-horn")
+        self.shake = max(self.shake, 0.7); self.bump_fx(x, y)
+        self.ride["bumped"] = self.ride.get("bumped", 0) + 1
+        if random.random() < 0.75:
+            self.app.do_method_later(0.6, lambda t: (self.driver_say("oops") if self.ride else None) or t.done, "taxi-oops")
+
+    def bump_fx(self, x, y):
+        """a quick burst of sparks + a puff at the point of contact"""
+        from panda3d.core import CardMaker
+        cm = CardMaker("spark"); cm.set_frame(-0.06, 0.06, -0.06, 0.06)
+        root = self.app.render.attach_new_node("bumpfx"); root.set_light_off(); root.set_bin("fixed", 30); root.set_depth_write(False)
+        sp = []
+        for k in range(22):
+            n = root.attach_new_node(cm.generate()); n.set_pos(x, y, 0.6); n.set_billboard_point_eye()
+            n.set_color(1.0, random.uniform(0.6, 0.95), 0.2, 1); sp.append((n, random.uniform(-6, 6), random.uniform(-6, 6), random.uniform(2, 6)))
+        st = {"t": 0.0}
+        def tick(task):
+            dt = globalClock.get_dt(); st["t"] += dt
+            for i, (n, vx, vy, vz) in enumerate(sp):
+                vz -= 12 * dt; sp[i] = (n, vx, vy, vz); n.set_pos(n.get_x() + vx * dt, n.get_y() + vy * dt, max(0.05, n.get_z() + vz * dt))
+            if st["t"] > 0.7: root.remove_node(); return task.done
+            return task.cont
+        self.app.task_mgr.add(tick, "bumpfx"); self.last_bump_fx = (root, sp)
+
+    def ride_cam_toggle(self):
+        if self.ride: self.ride["cam"] = "rear" if self.ride.get("cam", "fp") == "fp" else "fp"
 
     def skip_ride(self):
         r = self.ride
@@ -1171,15 +1427,34 @@ class Game:
         r = self.ride
         if not r or r.get("mode") != "riding": return
         r["t"] += dt; c = r["car"]
+        # v1.0.4 slapstick: every so often he clips a car or a street prop, jolts, and just carries on as if nothing happened
+        r["bump_t"] = r.get("bump_t", 8.0) - dt
+        if r["bump_t"] <= 0 and not c.ai.arrived and c.speed > 7.0:
+            self.taxi_bump(c); r["bump_t"] = random.uniform(9.0, 18.0)
+        # never stuck: if the taxi is boxed in by traffic for a while, clear the way, then hop it along the route
+        r["slow"] = r.get("slow", 0.0) + dt if (c.speed < 1.5 and not c.ai.arrived) else 0.0
+        if r["slow"] > 4.0 and not r.get("cleared"):
+            f = c.fwd; r["cleared"] = True
+            for o in list(self.cars_near(c.x, c.y, 12)):
+                if o is c or not isinstance(o.ai, TrafficAI): continue
+                dx, dy = o.x - c.x, o.y - c.y
+                if dx * f[0] + dy * f[1] > -1 and not self.in_view(o.x, o.y): self.remove_car(o)
+        if r["slow"] > 8.0:
+            pf = c.ai.pf; i = min(pf.i + 1, len(pf.pts) - 1); x, y = pf.pts[i]
+            nx_, ny_ = pf.pts[min(i + 1, len(pf.pts) - 1)]
+            c.x, c.y = x, y; c.vx = c.vy = 0.0
+            if (nx_, ny_) != (x, y): c.h = math.degrees(math.atan2(-(nx_ - x), ny_ - y))
+            pf.i = i; r["slow"] = 0.0; r["cleared"] = False
         if c.ai.arrived and c.speed < 1.0:
             fare = min(self.cash, r["fare"]); self.cash -= fare
             self.toast("Arrived. Fare paid: ¥%s" % format(fare, ","), 3.0); self.app.sfx("checkpoint", 0.6)
+            self.driver_say("arrive", extra="That'll be ¥%s. Cheers, have a good one!" % format(fare, ","), turn=True)
             self.leave_taxi()
 
     def leave_taxi(self):
         r = self.ride; self.close_overlay()
         if not r: return
-        c = r["car"]; self.ride = None; self.taxi = None
+        c = r["car"]; self.ride = None; self.taxi = None; self.me().np.show()
         x1, y1 = c.door_pos(-1)
         px, py, nx, ny, tag = self.world.grid.push_circle(x1, y1, 0.4)
         self.me().unseat(x1 + px, y1 + py, c.h + 90); self.buddy().unseat(x1 + px + 1.0, y1 + py + 0.5, c.h + 90)
@@ -1256,9 +1531,62 @@ class Game:
         elif sid == "tv":
             self.toast("NEON CITY NEWS: police chase on the coast road...  %s relaxes" % NAMES[self.active])
             me.health = min(100.0, me.health + 10.0); self.app.sfx("click", 0.5)
-        elif sid == "eat":
-            me.health = 100.0; self.toast("%s grabs a snack from the fridge  -  health full" % NAMES[self.active]); self.app.sfx("click", 0.5)
+        elif sid == "eat": self.house_snack()
+        elif sid == "laptop": self.laptop.toggle(desk=True)
         elif sid == "leave": self.leave_home()
+
+    # ---- v1.0.4: animated eating (house EAT SNACK + pause-menu FOOD) ----------------------------------------------
+    def fridge_door(self):
+        d = getattr(self, "_fridge", None)
+        if d is not None and not d.is_empty(): return d
+        from fs_miyo import box_mesh, shade
+        X, Y = D.HOME_INT; parent = NodePath(self.world.home_int)
+        inner = parent.attach_new_node(box_mesh("fridge_in", [(X + 5.295, Y + 1.36, 0.1, X + 5.31, Y + 2.24, 2.0, (0.98, 0.98, 1.0, 1)),
+                                                               (X + 5.27, Y + 1.36, 0.75, X + 5.3, Y + 2.24, 0.78, (0.75, 0.85, 0.95, 1)),
+                                                               (X + 5.27, Y + 1.36, 1.35, X + 5.3, Y + 2.24, 1.38, (0.75, 0.85, 0.95, 1)),
+                                                               (X + 5.27, Y + 1.5, 0.78, X + 5.3, Y + 1.7, 0.9, (0.95, 0.85, 0.2, 1)),
+                                                               (X + 5.27, Y + 1.9, 0.78, X + 5.3, Y + 2.1, 0.95, (0.2, 0.55, 0.9, 1)),
+                                                               (X + 5.27, Y + 1.55, 1.38, X + 5.3, Y + 1.95, 1.5, (0.9, 0.3, 0.3, 1))]))
+        inner.set_light_off(1)
+        d = self._fridge = parent.attach_new_node("fridge_hinge"); d.set_pos(X + 5.30, Y + 2.28, 0)
+        n = d.attach_new_node(box_mesh("fridge_door", [(-0.06, -0.96, 0.04, 0.0, 0.0, 2.06, (0.74, 0.76, 0.79, 1)),
+                                                       (-0.10, -0.86, 0.9, -0.06, -0.82, 1.5, (0.3, 0.3, 0.32, 1))]))
+        shade(n, self.app, 0.5)
+        return d
+
+    def house_snack(self):
+        if self.eating is not None: return
+        from fs_food import EatAnim, SNACKS, INFO
+        X, Y = D.HOME_INT; me = self.me()
+        me.x, me.y, me.h = X + 4.55, Y + 1.8, -90; me.speed = 0; me.sync(); me.walk_anim(0.016, 0.0)
+        fid = random.choice(SNACKS); self.home["mode"] = "eat"; self.home_prompt_off()
+        def done():
+            me.health = 100.0; self.home["mode"] = "room"
+            self.toast("%s ate %s  -  health full" % (NAMES[self.active], INFO[fid][2].lower()))
+        self.eating = EatAnim(self, me, fid, fridge=self.fridge_door(), on_done=done); self.app.sfx("click", 0.5)
+
+    def food_block(self):
+        if self.pcar is not None or self.ride: return "Pull over to eat"
+        if self.eating is not None: return "Still eating..."
+        if self.home and self.home.get("mode") != "room": return "Not right now"
+        if self.camapp: return "Close the camera first"
+        if self.me().in_car is not None or getattr(self.me(), "swim", False): return "Not right now"
+        return None
+
+    def eat_food(self, fid):
+        """pause-menu FOOD: pay, then the animated eat / drink; health up, water / tea sober you up after the bar"""
+        from fs_food import EatAnim, INFO
+        f = INFO[fid]; b = self.food_block()
+        if b: self.toast(b); return False
+        if self.cash < f[3]: self.toast("Not enough cash (¥%d)" % f[3]); return False
+        self.cash -= f[3]; me = self.me(); me.speed = 0; self.ledger.append(("FOOD: %s" % f[2], -f[3]))
+        if hasattr(self, "arsenal"): self.arsenal.unequip()
+        def done():
+            me.health = min(100.0, me.health + f[4])
+            if f[6]: self.drunk = max(0.0, getattr(self, "drunk", 0.0) + f[6])
+            self.toast("%s finished the %s  +%d health" % (NAMES[self.active], f[2].lower(), f[4])); self.save()
+        self.eating = EatAnim(self, me, fid, on_done=done); self.app.sfx("cash", 0.5)
+        return True
 
     def home_prompt(self):
         """contextual [E] button for the closest thing in the house (clickable too)"""
@@ -1301,7 +1629,7 @@ class Game:
         from panda3d.core import CardMaker
         me = self.me(); sx, sy = self.world.shower_pos
         self.home["mode"] = "shower"; self.home["prev"] = me.outfit; self.home["t"] = 0.0
-        me.set_outfit("bikini" if me.who == "ana" else "swim"); me.x, me.y, me.h = sx, sy, 90; me.sync(); me.walk_anim(0.016, 0.0)
+        me.set_outfit({"ana": "bikini", "daniel": "swim"}.get(me.who, me.outfit)); me.x, me.y, me.h = sx, sy, 90; me.sync(); me.walk_anim(0.016, 0.0)
         bd = self.buddy(); X, Y = D.HOME_INT; bd.x, bd.y, bd.h = X + 1.2, Y + 2.3, 180; bd.sync()
         fx = self.home["fx"] = self.world.home_int.attach_new_node("shower_fx"); drops = []
         cm = CardMaker("drop"); cm.set_frame(-0.006, 0.006, -0.16, 0.16)
@@ -1367,7 +1695,7 @@ class Game:
         U.text(o, "WARDROBE", (0, 0.58), 0.07, fg=pk)
         U.text(o, "ANA", (0, 0.51), 0.032, font=U.FONT_PLAIN)
         self._wd_lbl = U.text(o, "", (0, -0.36), 0.026, font=U.FONT_PLAIN, wrap=22)
-        for k, (oid, nm, desc) in enumerate(OUTFITS):
+        for k, (oid, nm, desc) in enumerate(self.outfit_list("ana")):
             U.button(o, nm, (0, 0.38 - k * 0.13), self.wardrobe_pick, w=0.3, h=0.05, scale=0.038, extra=[oid], edge=pk if oid == self.outfit else (0.5, 0.5, 0.6, 1))
         U.button(o, "EQUIP", (0, -0.5), lambda: self.close_wardrobe(True), w=0.3, h=0.055, scale=0.042, edge=U.CYAN, hint="Enter")
         U.button(o, "BACK", (0, -0.61), lambda: self.close_wardrobe(False), w=0.3, h=0.045, scale=0.034, hint="Esc")
@@ -1376,7 +1704,7 @@ class Game:
     def wardrobe_pick(self, oid):
         from fs_people import OUTFITS
         self.home["pick"] = oid; a = self.chars["ana"]; a.set_outfit(oid); a.sync(); a.walk_anim(0.016, 0.0)
-        d = dict((i, (n, t)) for i, n, t in OUTFITS)[oid]
+        d = dict((i, (n, t)) for i, n, t in self.outfit_list("ana"))[oid]
         try: self._wd_lbl.setText("%s\n%s" % d)
         except Exception: pass
         self.app.sfx("click", 0.5)
@@ -1385,13 +1713,39 @@ class Game:
         if not self.home: return
         a = self.chars["ana"]
         if equip:
-            self.outfit = self.home["pick"]; self.save(); self.toast("ANA is now wearing: %s" % self.outfit.upper())
+            self.apply_outfit("ana", self.home["pick"])
         else:
             a.set_outfit(self.home.get("orig", self.outfit))
         X, Y = D.HOME_INT; a.x, a.y, a.h = X - 3.1, Y - 3.5, 0; a.sync(); self.cam_yaw = 180.0; self.cam_pos = None
         if self.active != "ana":
             a.x, a.y = X - 2.5, Y - 2.8; a.sync()
         self.home["mode"] = "room"; self.home_panel()
+
+    # ---- v1.0.4: shared outfit logic (house WARDROBE + pause-menu CLOTHING)
+    def outfit_list(self, who=None):
+        from fs_people import outfits_for
+        return outfits_for(self.app.BASE, who or self.active)
+
+    def outfit_block(self):
+        """why clothes can't be changed right now (None = OK)"""
+        if self.pcar is not None or self.ride: return "Exit the vehicle first"
+        if self.home and self.home.get("mode") == "shower": return "Finish your shower first"
+        if self.home and self.home.get("mode") == "wardrobe": return "Close the wardrobe first"
+        if self.camapp: return "Close the camera first"
+        return None
+
+    def apply_outfit(self, who, oid):
+        """put an outfit on and save it - same result from the wardrobe or the pause menu"""
+        ok = [o[0] for o in self.outfit_list(who)]
+        if oid not in ok: return False
+        self.outfits[who] = oid
+        if who == "ana": self.outfit = oid
+        p = self.chars[who]
+        if p.outfit != oid: p.set_outfit(oid)
+        if not getattr(p, "benched", False): p.sync(); p.walk_anim(0.016, 0.0)
+        nm = dict((i, n) for i, n, _ in self.outfit_list(who))[oid]
+        self.save(); self.toast("%s is now wearing: %s" % (NAMES[who], nm))
+        return True
 
     def leave_home(self):
         self.arsenal.unequip()
@@ -1575,7 +1929,8 @@ class Game:
         self.race_t = U.text(a.a2dTopCenter, "", (0, -0.1), 0.05, fg=(1, 1, 1, 1))
         self.big = U.text(a.aspect2d, "", (0, 0.15), 0.22, fg=U.PINK)
         self.prompt = U.text(a.aspect2d, "", (0, -0.55), 0.045, fg=(1, 1, 1, 1))
-        self.sub = U.text(a.a2dBottomCenter, "", (0, 0.32), 0.042, fg=(1, 1, 1, 1), font=U.FONT_PLAIN, wrap=34, shadow=(0, 0, 0, 1))
+        self.sub = U.text(a.a2dBottomCenter, "", (0, 0.36), 0.044, fg=(1, 1, 1, 1), font=U.FONT_PLAIN, wrap=34, shadow=(0, 0, 0, 1))
+        self.sub_en = U.text(a.a2dBottomCenter, "", (0, 0.305), 0.032, fg=(0.8, 0.9, 1.0, 1), font=U.FONT_PLAIN, wrap=46, shadow=(0, 0, 0, 1))
         self.toast_t = U.text(a.aspect2d, "", (0, 0.62), 0.045, fg=U.CYAN); self.toast_k = 0.0
         self.cap1 = U.text(a.aspect2d, "", (0, 0.05), 0.11, fg=(1, 1, 1, 1)); self.cap2 = U.text(a.aspect2d, "", (0, -0.05), 0.045, fg=U.CYAN, font=a.jpfont)
         self.cap_k = 0.0
@@ -1603,7 +1958,8 @@ class Game:
         if self.phone is not None and getattr(self.phone, "driving", None) is not None and self.phone.driving != (self.pcar is not None):
             self.phone_screen(self.phone.which); return
         st = (self.pcar is not None, self.ride is not None and self.ride.get("mode"), self.phone is not None, self.overlay is not None,
-              self.garage is not None or self.home is not None or self.camapp is not None, self.active, self.app.settings.get("buttons", True), bool(self.near_marker()) if hasattr(self, "markers") else False)
+              self.garage is not None or self.home is not None or self.camapp is not None, self.active, self.app.settings.get("buttons", True), bool(self.near_marker()) if hasattr(self, "markers") else False,
+              self.miyo.state() if hasattr(self, "miyo") else None, self.miyo_spot() if hasattr(self, "miyo") else None)
         if st == self.btn_state: return
         self.btn_state = st
         for n in getattr(self, "btn_nodes", []): n.destroy()
@@ -1618,16 +1974,19 @@ class Game:
         U.button(tl, "MENU", (0.13, -0.07), self.key_esc, hint="Esc", **sm)
         U.button(tl, "MAP", (0.36, -0.07), self.toggle_map, hint="M", **sm)
         U.button(tl, "PHONE", (0.59, -0.07), self.toggle_phone, hint="T", edge=self.accent(), **sm)
-        sw = U.button(tl, "", (0.25, -0.28), self.switch_char, w=0.21, h=0.15, scale=0.03, hint="Q", edge=self.accent())
-        for k, who in enumerate(("ana", "daniel")):
-            x = -0.1 + k * 0.2; on = who == self.active
+        U.button(tl, "LAPTOP", (0.82, -0.07), lambda: self.laptop.toggle(), hint="L", edge=(0.35, 0.85, 1.0, 1), **sm)
+        sw = U.button(tl, "", (0.35, -0.28), self.switch_char, w=0.31, h=0.15, scale=0.03, hint="Q", edge=self.accent())
+        for k, who in enumerate(CREW):
+            x = -0.2 + k * 0.2; on = who == self.active
             DirectFrame(parent=sw, frameColor=(0.3, 1.0, 1.0, 1) if on else (0.35, 0.35, 0.42, 1),
                         frameSize=(-0.092, 0.092, -0.092, 0.092), pos=(x, 0, 0.025), relief=DGG.FLAT)
             try:
                 im = OnscreenImage(parent=sw, image=self.portrait(who), pos=(x, 0, 0.025), scale=0.085)
                 if not on: im.set_color_scale(0.6, 0.6, 0.65, 1)
             except Exception: pass
-            U.text(sw, NAMES[who], (x, -0.125), 0.032, fg=(0.3, 1.0, 1.0, 1) if on else (0.8, 0.8, 0.85, 1))
+            U.text(sw, NAMES[who], (x, -0.125), 0.032 if len(NAMES[who]) < 7 else 0.025, fg=(0.3, 1.0, 1.0, 1) if on else (0.8, 0.8, 0.85, 1))
+            hot = DirectButton(parent=sw, frameColor=(0, 0, 0, 0), frameSize=(-0.092, 0.092, -0.14, 0.12), pos=(x, 0, 0.0), relief=DGG.FLAT,
+                               command=lambda w=who: self.select_char(w), pressEffect=0)
         if self.ride:
             br = DirectFrame(parent=a.a2dBottomRight, frameColor=(0, 0, 0, 0)); self.btn_nodes.append(br)
             if self.ride.get("mode") == "riding":
@@ -1657,6 +2016,17 @@ class Game:
             U.button(br, "FIRE", (col2, rows[2]), None, hint="LMB", press=fp, release=fr, edge=(1, 0.4, 0.3, 1), **bw)
             p, r = self.hold("v_aim"); U.button(br, "AIM", (col1, rows[2]), None, hint="RMB", press=p, release=r, **bw)
             U.button(br, "WEAPONS", (col1, rows[3]), lambda: self.arsenal.toggle_wheel(), hint="Tab", edge=U.GOLD, **bw)
+        # v1.0.4: MIYOYAZU's abilities (contextual-button style, with key hints) + STOP TSUNAMI for anyone
+        if self.active == "miyo" and not self.pcar:
+            U.button(br, "BUILD", (col2, rows[3]), self.key_b, hint="B", edge=(1.0, 0.55, 0.1, 1), **bw)
+            if self.tsunami is None:
+                U.button(br, "TSUNAMI", (col2, rows[4]), self.key_n, hint="N", edge=(0.3, 0.75, 1.0, 1), **bw)
+        if self.tsunami is not None and not self.tsunami.drain:
+            U.button(br, "STOP TSUNAMI", (col1 - 0.02, rows[4] if not self.pcar else rows[3]), self.miyo.stop_tsunami, hint="N", edge=(1, 0.3, 0.3, 1), **dict(bw, w=0.15))
+        sp = self.miyo_spot()
+        if sp:
+            ctx = DirectFrame(parent=a.a2dBottomCenter, frameColor=(0, 0, 0, 0), pos=(0, 0, 0.30)); self.btn_nodes.append(ctx)
+            U.button(ctx, sp[0], (0, 0), sp[1], hint=sp[2], w=0.3, h=0.05, scale=0.036, edge=sp[3])
         m = self.near_marker()
         if m:
             U.button(br, {"garage": "GARAGE", "shop": "REFILL", "home": "ENTER HOME"}.get(m["kind"], "START"), (col2, rows[3] if self.pcar else rows[1]), self.key_e, hint="E",
@@ -1669,6 +2039,13 @@ class Game:
         for key, lbl, pos, hint in (("v_up", "▲", (0.25, 0.37), "W"), ("v_down", "▼", (0.25, 0.1), "S"),
                                     ("v_left", "◀", (0.11, 0.1), "A"), ("v_right", "▶", (0.39, 0.1), "D")):
             p, r = self.hold(key); U.button(bl, lbl, pos, None, hint=hint, press=p, release=r, **pd)
+
+    def miyo_spot(self):
+        """contextual prompt: MIYOYAZU standing on HIKARI BEACH can call the TSUNAMI from right there"""
+        if self.active != "miyo" or self.pcar or self.tsunami is not None or self.home or self.garage: return None
+        me = self.me()
+        if D.SAND[0] - 2 < me.x < D.SEA_X + 2: return ("SUMMON TSUNAMI", self.key_n, "N", (0.3, 0.75, 1.0, 1))
+        return None
 
     def add_cash(self, amount):
         """Add cash (int), clamped so the total never exceeds CASH_CAP. Returns the amount actually added."""
@@ -1713,7 +2090,7 @@ class Game:
         self.toast_k -= dt; self.cap_k -= dt; self.pop_k -= dt; self.sub_t -= dt
         if self.toast_k <= 0: self.toast_t.setText("")
         if self.cap_k <= 0: self.cap1.setText(""); self.cap2.setText("")
-        if self.sub_t <= 0: self.sub.setText("")
+        if self.sub_t <= 0: self.sub.setText(""); self.sub_en.setText("")
         if self.pop_k <= 0: self.pop1.setText(""); self.pop2.setText("")
         else:
             al = min(1.0, self.pop_k); self.pop1.setFg(self.pop_col + (al,)); self.pop2.setFg(self.pop_col + (al,))
@@ -1778,7 +2155,7 @@ class Game:
         if c: self.nitro_bar[1].set_sx(max(0.001, c.nitro_amt))
         me = self.me(); self.hp_bar[1].set_sx(max(0.001, me.health / 100.0))
         self.cash_t.setText(fmt_cash_hud(self.cash))
-        if self.cash_pop_k > 0:      # GTA-style "+¥..." that rises and fades under the cash, cash flashes green
+        if self.cash_pop_k > 0:      # classic "+¥..." that rises and fades under the cash, cash flashes green
             self.cash_pop_k -= dt; f = max(0.0, self.cash_pop_k / 2.6)
             self.cash_pop.set_z(-0.075 + 0.03 * (1 - f)); self.cash_pop["fg"] = (0.3, 1.0, 0.45, min(1.0, f * 2.5))
             self.cash_t["fg"] = (0.3 + 0.7 * (1 - f), 1.0, 0.45 * f + 0.2 * (1 - f), 1) if f > 0.6 else U.GOLD
@@ -1802,6 +2179,8 @@ class Game:
         m = self.near_marker()
         if self.garage or self.overlay or self.phone: self.prompt.setText("")
         elif m: self.prompt.setText("[E] %s" % ("ENTER FRGARAGE" if m["kind"] == "garage" else "ENTER HOME" if m["kind"] == "home" else ("REFILL AMMO (¥300)" if m["kind"] == "shop" else "START " + m["name"])))
+        elif self.miyo_spot(): self.prompt.setText("[N] SUMMON TSUNAMI")
+        elif getattr(self, "bar", None) is not None and self.bar.near(): self.prompt.setText("[E] ORDER A DRINK  -  HIKARI BEACH BAR")
         elif self.pcar is None and self.ride is None and self.taxi_ai_arrived() and math.hypot(self.taxi.x - me.x, self.taxi.y - me.y) < 8:
             self.prompt.setText("[F] RIDE JP TAXI")
         elif self.pcar is None and self.ride is None and any(math.hypot(o.x - me.x, o.y - me.y) < o.spec["hl"] + 2.3 for o in self.cars_near(me.x, me.y, 7)
@@ -1939,7 +2318,10 @@ class Game:
         self.time += dt
         self.update_daynight(dt)
         if self.home:
-            self.update_home(dt); self.update_camapp(dt); self.update_hud(dt); self.app.update_audio(self, dt); return
+            self.update_home(dt); self.update_camapp(dt); self.update_hud(dt); self.app.update_audio(self, dt)
+            if self.eating is not None and self.eating.update(dt): self.eating = None
+            self.laptop.update(dt)
+            return
         if self.intro_t > 0:
             self.intro_t -= dt
             if self.intro_t <= 0: self.letterbox(False); self.cam_pos = None
@@ -1965,7 +2347,12 @@ class Game:
         self.world.update(dt, self.time)
         for m in self.markers:
             if "np" in m: m["np"].set_h(self.time * 30)
-        self.update_camera(dt)
+        self.miyo.update(dt); self.signals.update(dt); self.laptop.update(dt)
+        if self.eating is not None and self.eating.update(dt): self.eating = None
+        self.update_camera(dt); self.update_taxi_fx(dt)
+        if self.drunk > 0:                       # v1.0.4: tipsy from the bar - a gentle camera sway, wears off slowly
+            self.drunk = max(0.0, self.drunk - dt * 0.006); dk = min(1.0, self.drunk / 4.0)
+            self.app.camera.set_r(self.app.camera.get_r() + math.sin(self.time * 0.9) * 3.0 * dk)
         self.update_camapp(dt)
         self.update_hud(dt)
         self.app.update_audio(self, dt)
@@ -1992,14 +2379,15 @@ class Game:
     # ================================================================ persistence
     def save(self):
         d = {"cash": self.cash, "tokens": [list(t) for t in self.tokens], "best": self.best, "cars": self.cars_cfg,
-             "speedcams": self.cam_cams, "active": self.active, "outfit": self.outfit, "car": self.player_kind, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": [NAMES["ana"], NAMES["daniel"]], "version": self.app.VERSION}
+             "speedcams": self.cam_cams, "active": self.active, "mate": self.mate, "outfit": self.outfit, "outfits": dict(self.outfits), "photos": list(getattr(self, "photos", [])), "ledger": [list(x) for x in getattr(self, "ledger", [])][-30:],
+             "owned": getattr(self, "owned", {}), "news": [list(x) for x in getattr(self, "news", [])][-10:], "misto": getattr(self, "misto", {}), "drunk": getattr(self, "drunk", 0.0), "car": self.player_kind, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": [NAMES["ana"], NAMES["daniel"]], "version": self.app.VERSION}
         try: self.app.write_save(d)
         except Exception as e: self.app.log_error(e)
 
     def destroy(self):
         self.app.task_mgr.remove("fs-ds"); self._ds_end()
         self.save()
-        self.app.task_mgr.remove("game-update"); self.unbind(); self.arsenal.destroy()
+        self.app.task_mgr.remove("game-update"); self.unbind(); self.arsenal.destroy(); self.miyo.destroy(); self.signals.destroy()
         for c in list(self.cars): c.destroy()
         for p in self.peds: p.destroy()
         for p in self.chars.values(): p.destroy()
@@ -2008,7 +2396,7 @@ class Game:
         if self.cp_np: self.cp_np.remove_node()
         for o in (self.btn_root, self.overlay, self.phone): 
             if o: o.destroy()
-        for t in (self.speed_t, self.kmh_t, self.cash_t, self.stars_t, self.race_t, self.big, self.prompt, self.sub, self.toast_t, self.cap1, self.cap2,
+        for t in (self.speed_t, self.kmh_t, self.cash_t, self.stars_t, self.race_t, self.big, self.prompt, self.sub, self.sub_en, self.toast_t, self.cap1, self.cap2,
                   self.pop1, self.pop2, self.dist_lbl, self.dist_lbl_jp):
             t.destroy()
         self.nitro_bar[0].destroy(); self.hp_bar[0].destroy()
