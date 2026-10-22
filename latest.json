@@ -1,9 +1,9 @@
 {
-  "version": "1.0.4",
-  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.4",
-  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4/FIREOUT-SHINE-Setup-1.0.4.exe",
-  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4/FIREOUT-SHINE-Setup-1.0.4.exe",
-  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4/FIREOUT-SHINE-1.0.4-Windows-x64.zip",
-  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4/FIREOUT-SHINE-Portable.exe",
-  "notes": "New playable MIYOYAZU with BUILD (city-style buildings, animal statues, vehicles) and TSUNAMI, taxi rides with a British-voiced driver and first-person view, dense traffic with signals, distinct Japanese-speaking pedestrians, food and eating, the IX LAPTOPOS G9 laptop, MISTO 2 filters, pause-menu CLOTHING and FOOD, and no more glow."
+  "version": "1.0.4.1",
+  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.4.1",
+  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4.1/FIREOUT-SHINE-Setup-1.0.4.1.exe",
+  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4.1/FIREOUT-SHINE-Setup-1.0.4.1.exe",
+  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4.1/FIREOUT-SHINE-1.0.4.1-Windows-x64.zip",
+  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.4.1/FIREOUT-SHINE-Portable.exe",
+  "notes": "ANA now has BUILD and TSUNAMI (same as before, B and N). MIYOYAZU removed; v1.0.4 saves with her active load as ANA. ANA's skin is warmer and more realistic."
 }
