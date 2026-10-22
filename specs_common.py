@@ -9,6 +9,7 @@ ASSETS = [(f, 'assets') for f in ('assets/cover.jpg', 'assets/backdrop.jpg', 'as
                                   'assets/ui_plain.ttf', 'assets/jp_font.otf')]
 ASSETS += [('assets/sfx', 'assets/sfx'), ('assets/voice', 'assets/voice'), ('assets/tex', 'assets/tex')]
 ASSETS += [(f, 'assets/models') for f in glob.glob('assets/models/*.bam')]
+ASSETS += [(f, 'assets/models') for f in glob.glob('assets/models/*.json')]   # v1.0.3: SELMOTES face patches
 HIDDEN = ['panda3d.core', 'panda3d.direct', 'direct.showbase.ShowBase', 'direct.gui.DirectGui', 'direct.filter.CommonFilters',
           'fs_game', 'fs_game_banter', 'fs_world', 'fs_geom', 'fs_vehicle', 'fs_people', 'fs_ai', 'fs_ui', 'fs_data', 'fs_lines',
           'fs_shaders', 'fs_menu_stage', 'fs_weapons']
