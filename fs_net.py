@@ -162,7 +162,7 @@ class UPnP:
 # ------------------------------------------------------------------ session
 class Session:
     """one UDP socket. role 'host' or 'join'. Call poll() every frame from the game thread; read .events for UI."""
-    def __init__(self, role, name="PLAYER", cfg=None, password="", port=None, upnp=True, stun=True):
+    def __init__(self, role, name="PLAYER", cfg=None, password="", port=None, upnp=True, stun=True, sim_firewall=None):
         self.role = role; self.name = name; self.cfg = cfg or {}; self.password = password or ""
         self.events = []; self.peers = {}; self.my_id = 0 if role == "host" else None; self.state = "starting"
         self.status = ""; self.code = None; self.key = None; self.key0 = None; self.public = None; self.via = ""
@@ -171,9 +171,15 @@ class Session:
         self.joined_at = None; self.join_started = None; self.reachable = False; self.remote_states = {}; self.chat = []
         self.kicked = False; self.nonce = random.getrandbits(12); self.upnp = UPnP() if upnp else None
         self.lip = local_ip(); self._stun_tx = {}; self._next_id = 1; self.punch_to = []
+        # v1.0.5.1: everything is outbound-first. A stateful firewall (Windows Defender Firewall with no rule, or the user
+        # dismissed its prompt) only lets in packets from addresses this socket has already sent to, so: the guest calls the
+        # host, the host calls the guest (reply code / LAN), and keep-alives hold both doors open. sim_firewall drops
+        # everything else, to test exactly that.
+        self.sim_fw = bool(sim_firewall if sim_firewall is not None else os.environ.get("FS_NET_SIMFW"))
+        self._out = set(); self._bcast_t = 0.0; self.dropped = 0; self._ka_t = 0.0
+        want = PORT if port is None else port
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        want = PORT if port is None else port
         for p in ([want, 0] if role == "host" else [0]):
             try: self.sock.bind(("0.0.0.0", p)); break
             except OSError: continue
@@ -193,7 +199,16 @@ class Session:
             except OSError:
                 if not self.alive: break
                 time.sleep(0.05); continue
+            lan_resp = time.time() - self._bcast_t < 3.0 and is_private(addr[0]) and not addr[0].startswith("127.")
+            if self.sim_fw and addr not in self._out and not lan_resp:
+                self.dropped += 1; continue           # unsolicited: a stateful firewall would drop it
             self.inbox.put((data, addr))
+
+    def _tx(self, data, addr):
+        """every datagram goes out through here, so we know which doors are open"""
+        self._out.add((addr[0], int(addr[1])))
+        if addr[0].endswith(".255"): self._bcast_t = time.time()
+        self.sock.sendto(data, addr)
 
     def _stun(self, timeout=2.5):
         """ask every STUN server at once (same socket the game uses), first answer wins"""
@@ -206,7 +221,7 @@ class Session:
         t0 = time.time()
         while time.time() - t0 < timeout:
             for tid, addr in txs:
-                try: self.sock.sendto(struct.pack("!HHI", 0x0001, 0, MAGIC) + tid, addr)
+                try: self._tx(struct.pack("!HHI", 0x0001, 0, MAGIC) + tid, addr)
                 except OSError: pass
             if ev.wait(0.8): break
         res = None
@@ -259,7 +274,7 @@ class Session:
 
     # ---- helpers
     def send(self, addr, msg, key=None):
-        try: self.sock.sendto(seal(key or self.key, msg), addr)
+        try: self._tx(seal(key or self.key, msg), addr)
         except OSError: pass
 
     def on(self, t, fn): self.handlers[t] = fn
@@ -293,7 +308,10 @@ class Session:
     def let_in(self, code):
         p = parse_code(code)
         if not p: return False
-        self.punch_to.append([(p[0], p[1]), time.time() + 20.0]); return True
+        ep = (p[0], p[1])
+        for pt in self.punch_to:
+            if pt[0] == ep: pt[1] = time.time() + 90.0; return True
+        self.punch_to.append([ep, time.time() + 90.0, 0.0]); return True
 
     # ---- the frame pump
     def poll(self, now=None, my_state=None):
@@ -304,6 +322,11 @@ class Session:
             if len(data) >= 20 and data[4:8] == struct.pack("!I", MAGIC):
                 self._stun_parse(data); continue
             if self.key is None: continue
+            if self.role == "host" and self.code:
+                lq = open_(LAN_KEY, data)
+                if lq is not None:                       # a LAN game asked "anyone hosting?" by broadcast: answer it directly
+                    if lq.get("t") == "lanq": self._lan_reply(addr)
+                    continue
             m = open_(self.key, data); weak = False
             if m is None:
                 m = open_(self.key0, data); weak = True
@@ -327,6 +350,7 @@ class Session:
                     if len(self.peers) >= 7: self.send(addr, {"t": "full"}); return
                     pid = self._next_id; self._next_id += 1
                     self.peers[pid] = {"addr": addr, "name": str(m.get("name", "FRIEND"))[:12], "cfg": m.get("cfg") or {}, "last": now, "ping": None, "state": None}
+                    self.punch_to = [pt for pt in self.punch_to if pt[0] != addr]
                     self.events.append(("join", pid)); self._say("%s JOINED" % self.peers[pid]["name"], now)
                     self._roster_t = 0.0
                 self.peers[pid]["last"] = now
@@ -353,6 +377,9 @@ class Session:
             self.last_host = now
             if t == "probe_ok":
                 self.reachable = True; self.need_pw = m.get("pw")
+            elif t == "punch":                         # the host is calling us (reply code): answer at once
+                if self.state == "joining":
+                    self.send(self.host_addr, {"t": "hello", "name": self.name, "cfg": self.cfg, "v": VER})
             elif t == "welcome":
                 if self.my_id is None:
                     self.events.append(("joined", m.get("id"))); self.joined_at = now
@@ -402,9 +429,12 @@ class Session:
         if self.key is None: return
         for pid in [k for k, p in self.peers.items() if now - p["last"] > 12.0]:
             nm = self.peers[pid]["name"]; del self.peers[pid]; self.events.append(("leave", pid)); self._say("%s LOST CONNECTION" % nm, now); self._roster_t = 0.0
-        for pt in list(self.punch_to):
+        for pt in list(self.punch_to):                 # calling a guest from their reply code, until they arrive
             if now > pt[1]: self.punch_to.remove(pt); continue
-            self.send(pt[0], {"t": "punch"})
+            if now - pt[2] > 0.25: pt[2] = now; self.send(pt[0], {"t": "punch"})
+        if now - self._ka_t > 5.0:                     # keep-alive: holds router + firewall mappings even when idle
+            self._ka_t = now
+            for p in self.peers.values(): self.send(p["addr"], {"t": "ka"})
         if now - self._ping_t > 1.0:
             self._ping_t = now
             for p in self.peers.values(): self.send(p["addr"], {"t": "ping", "c": now})
@@ -420,11 +450,17 @@ class Session:
             self.broadcast({"t": "roster", "p": ros})
         if self.lan is not None and now - self._lan_t > 2.0:
             self._lan_t = now
-            pkt = seal(LAN_KEY, {"t": "lan", "code": self.code, "name": self.name, "pw": bool(self.password), "n": len(self.peers) + 1,
-                                 "ip": self.lip, "port": self.port})
-            for dst in ("255.255.255.255", "127.255.255.255"):
-                try: self.lan.sendto(pkt, (dst, LAN_PORT))
+            for dst in ("255.255.255.255", "127.255.255.255"):     # from the game socket: LAN replies count as responses
+                try: self._tx(self._lan_pkt(), (dst, LAN_PORT))
                 except OSError: pass
+
+    def _lan_pkt(self):
+        return seal(LAN_KEY, {"t": "lan", "code": self.code, "name": self.name, "pw": bool(self.password), "n": len(self.peers) + 1,
+                              "ip": self.lip, "port": self.port})
+
+    def _lan_reply(self, addr):
+        try: self._tx(self._lan_pkt(), addr)
+        except OSError: pass
 
     def _join_tick(self, now, my_state):
         if self.state == "joining":
@@ -434,8 +470,8 @@ class Session:
                 self.send(self.host_addr, {"t": "hello", "name": self.name, "cfg": self.cfg, "v": VER})
             el = now - (self.join_started or now)
             if el > 4 and self.reachable and getattr(self, "need_pw", False): self.status = "HOST ANSWERED - CHECK THE PASSWORD"
-            elif el > 6 and not self.reachable: self.status = "NO ANSWER YET - SEND THE HOST YOUR REPLY CODE (LET A FRIEND IN)"
-            if el > 25:
+            elif el > 5 and not self.reachable: self.status = "NO ANSWER YET - SEND THE HOST YOUR REPLY CODE (LET A FRIEND IN)"
+            if el > 120:
                 self.state = "error"
                 self.status = ("WRONG PASSWORD" if self.reachable and getattr(self, "need_pw", False) else
                                "COULD NOT REACH THE HOST. " + self.forward_hint())
@@ -443,6 +479,7 @@ class Session:
             if my_state is not None: self.send(self.host_addr, {"t": "st", "s": my_state})
             if now - self._ping_t > 1.0:
                 self._ping_t = now; self.send(self.host_addr, {"t": "ping", "c": now})
+            if now - self._ka_t > 5.0: self._ka_t = now; self.send(self.host_addr, {"t": "ka"})
             if now - getattr(self, "last_host", now) > 12.0:
                 self.state = "ended"; self.status = "LOST CONNECTION TO THE HOST"; self.events.append(("ended", None))
 
@@ -476,8 +513,10 @@ class LanBrowser:
             if hasattr(socket, "SO_REUSEPORT"):
                 try: s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
                 except OSError: pass
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             s.bind(("", LAN_PORT)); s.settimeout(0.3); self.s = s
             threading.Thread(target=self._rx, daemon=True).start()
+            threading.Thread(target=self._ask, daemon=True).start()
         except OSError:
             self.s = None
 
@@ -489,6 +528,15 @@ class LanBrowser:
             m = open_(LAN_KEY, data)
             if m and m.get("t") == "lan" and parse_code(m.get("code")):
                 self.found[m["code"]] = dict(m, seen=time.time(), lan_addr=(addr[0], int(m.get("port", PORT))))
+
+    def _ask(self):
+        """outbound broadcast "anyone hosting?" - hosts answer straight back, which a stateful firewall lets in"""
+        q = seal(LAN_KEY, {"t": "lanq"})
+        while self.alive and self.s is not None:
+            for dst in ("255.255.255.255", "127.255.255.255"):
+                try: self.s.sendto(q, (dst, PORT))
+                except OSError: pass
+            time.sleep(1.0)
 
     def sessions(self):
         now = time.time()

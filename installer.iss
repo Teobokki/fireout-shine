@@ -1,4 +1,4 @@
-#define MyVer "1.0.5"
+#define MyVer "1.0.5.1"
 [Setup]
 AppId={{7E3A91C4-2B6D-4F18-A5C9-3D8E1F0B6A72}
 AppName=FIREOUT SHINE

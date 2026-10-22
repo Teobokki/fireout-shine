@@ -49,7 +49,8 @@ W/S accelerate/brake · A/D steer · Space handbrake · Shift nitro/run · F ent
 ## SHINE ONLINE: internet play notes
 - The host's game listens on UDP port 47115. If the router supports UPnP, the port is opened automatically. If not, and a friend can't connect, forward **UDP 47115** to the host's PC. The game tells you this too.
 - Strict or symmetric NAT and carrier-grade NAT (some mobile and fibre providers) can block direct connections. Try the REPLY CODE exchange; if that fails, the host needs a port forward. There's no relay server.
-- Windows may ask to let FIREOUT SHINE through the firewall the first time you host or join. Choose Allow.
+- No admin rights and no firewall setup. SHINE ONLINE connects outbound-first: the guest calls the host, and the host calls the guest back from the guest's REPLY CODE. Keep-alives hold the connection open, so Windows Firewall lets the replies in even if you dismiss its prompt. If a friend doesn't connect within a few seconds, they send you their REPLY CODE and you type it into LET A FRIEND IN.
+- SHINE SFC 27 match length defaults to UNLIMITED: the clock counts up until you press END MATCH (Esc menu or the on-screen button). Timed matches of 4, 8, 12 or 90 minutes can still be picked, and the host's choice applies to everyone online.
 
 ## Credits
 Fonts: Exo 2 and Noto Sans CJK JP (SIL Open Font License). English voices: Piper TTS with Kristin (LibriVox, public domain), Joe (CC0), LibriTTS-R speakers (CC BY 4.0) and, for the taxi driver, northern_english_male (OpenSLR 83, CC BY-SA 4.0). Japanese voice: Open JTalk with HTS voice "Mei" (MMDAgent Project Team / Nagoya Institute of Technology, CC BY 3.0). Engine: Panda3D. All places, brands, signs and vehicles are fictional.

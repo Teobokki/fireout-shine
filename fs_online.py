@@ -182,7 +182,7 @@ class Online:
 
     def _handlers(self):
         s = self.sess
-        s.on("fbi", self._on_fb_input); s.on("fb_start", self._on_fb_start); s.on("fb", self._on_fb_snap); s.on("fb_end", self._on_fb_end)
+        s.on("fbi", self._on_fb_input); s.on("fb_start", self._on_fb_start); s.on("fb", self._on_fb_snap); s.on("fb_end", self._on_fb_end); s.on("fb_leave", self._on_fb_leave)
 
     def leave(self, quiet=False):
         if self.sess is not None:
@@ -322,7 +322,7 @@ class Online:
         self.hud.setText(t)
 
     # ----------------------------------------------------------------- football glue
-    def start_football(self, versus=False, minutes=4.0, home=0, away=1):
+    def start_football(self, versus=False, minutes=0.0, home=0, away=1):
         g = self.g; s = self.sess
         if s is not None and s.role == "join":
             g.toast("Only the host can start an online match - ask them to press ONLINE MATCH", 3.0); return
@@ -341,6 +341,18 @@ class Online:
         self._fb_t -= dt
         if self._fb_t <= 0 and self.sess is not None:
             self._fb_t = 1.0 / 15.0; self.sess.broadcast({"t": "fb", "s": m.snapshot()})
+
+    def fb_leave(self):
+        s = self.sess
+        if s is not None and s.role == "join":
+            for _ in range(3): s.to_host({"t": "fb_leave"})
+
+    def _on_fb_leave(self, pid, msg):
+        m = getattr(self.g, "match", None)
+        if m is None or m.mode != "sim": return
+        for f in m.fps:
+            if f.human == pid:
+                f.human = None; f.inp = {"mv": (0, 0), "sp": False}; f.acts = []; m.banner("%s LEFT - AI TAKES OVER" % f.name, 2.0)
 
     def fb_end(self, m):
         if self.sess is not None:
@@ -408,6 +420,7 @@ class Online:
         if self.ui is not None:
             if g.overlay is self.ui: g.overlay = None
             self.ui.destroy()
+        self.labels = []
         o = self.ui = DirectFrame(parent=self.app.aspect2d, frameColor=(0, 0, 0, 0.35), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
         o.is_online = True; g.overlay = o
         getattr(self, "view_" + self.view, self.view_main)(o)
@@ -419,6 +432,7 @@ class Online:
         U.text(o, sub, ((l + r) / 2, t - 0.17), 0.03, fg=(0.85, 0.85, 0.95, 1), font=U.FONT_PLAIN)
 
     def _btn(self, o, lbl, pos, fn, w=0.28, edge=PINK, sc=0.034, h=0.045, hint=None):
+        self.labels.append(lbl)
         return U.button(o, lbl, pos, fn, w=w, h=h, scale=sc, edge=edge, hint=hint)
 
     def view_main(self, o):
@@ -461,8 +475,10 @@ class Online:
             U.text(o, s.status + (("   -   PING %d ms" % s.ping_ms) if s.ping_ms is not None else ""), (0, y - 0.06), 0.028, fg=(0.8, 0.85, 1, 1), font=U.FONT_PLAIN, wrap=60)
             if s.state == "joining":
                 rc = s.reply_code()
-                U.text(o, "Strict router? Send the host your REPLY CODE:  %s" % (rc or "(finding your address...)"), (0, y - 0.13), 0.028, fg=CY_, font=U.FONT_PLAIN)
-                U.text(o, s.forward_hint() + " if it still can't connect.", (0, y - 0.18), 0.024, fg=(1, 0.6, 0.5, 1), font=U.FONT_PLAIN)
+                U.text(o, "YOUR REPLY CODE:  %s" % (rc or "(finding your address...)"), (0, y - 0.13), 0.034, fg=CY_)
+                U.text(o, "Not connected after a few seconds? Send this to the host - they type it into LET A FRIEND IN and you connect.",
+                       (0, y - 0.18), 0.024, fg=(0.85, 0.9, 1, 1), font=U.FONT_PLAIN)
+                U.text(o, "Last resort only: " + s.forward_hint().lower() + ".", (0, y - 0.22), 0.022, fg=(1, 0.6, 0.5, 1), font=U.FONT_PLAIN)
             else:
                 ros = getattr(s, "roster", [])
                 for k, e in enumerate(ros[:6]):
@@ -490,8 +506,6 @@ class Online:
                   "both into a SHINE-XXXX-XXXX code. Same Wi-Fi friends also see you under LAN SESSIONS.", (0, 0.12), 0.026,
                fg=(0.8, 0.85, 1, 1), font=U.FONT_PLAIN)
         self._btn(o, "START HOSTING", (0, -0.1), lambda: (self.host(pw.get().strip()), self.goto("main")), edge=CY_)
-        U.text(o, "Windows may ask to let FIREOUT SHINE through the firewall the first time - choose Allow.", (0, -0.22), 0.026,
-               fg=(1, 0.8, 0.5, 1), font=U.FONT_PLAIN)
         self._btn(o, "BACK", (0, -0.62), lambda: self.goto("main"))
 
     def view_join(self, o):
@@ -519,11 +533,11 @@ class Online:
         self._btn(o, "BACK", (0, -0.62), lambda: self.goto("main"))
 
     def view_letin(self, o):
-        self._hdr(o, "LET A FRIEND IN: for strict routers - your friend reads you the REPLY CODE on their screen")
+        self._hdr(o, "LET A FRIEND IN: type the REPLY CODE on your friend's screen - your game calls them, so it gets through")
         ce = DirectEntry(parent=o, initialText="SHINE-", width=17, numLines=1, scale=0.05, pos=(-0.45, 0, 0.3), frameColor=(0.1, 0.08, 0.15, 1),
                          text_fg=(1, 1, 1, 1), entryFont=U.FONT_PLAIN, focus=1); o.ent = ce
         def go():
-            if self.sess and self.sess.let_in(ce.get().strip()): self.g.toast("Punching through to your friend for 20 s...", 3.0); self.goto("main")
+            if self.sess and self.sess.let_in(ce.get().strip()): self.g.toast("Calling your friend for 90 s...", 3.0); self.goto("main")
             else: self.g.toast("That reply code looks wrong", 2.5)
         self._btn(o, "LET THEM IN", (0, 0.15), go, edge=CY_)
         self._btn(o, "BACK", (0, -0.62), lambda: self.goto("main"))
@@ -580,7 +594,7 @@ class Online:
     def view_football(self, o):
         import fs_sfc as F
         self._hdr(o, "SHINE SFC 27  -  7-a-side on a full-size pitch at the SHINE SFC 27 STADIUM, Hikari Beach")
-        st = getattr(self, "fb", None) or {"home": 0, "away": 1, "min": 4.0}; self.fb = st
+        st = getattr(self, "fb", None) or {"home": 0, "away": 1, "min": 0.0}; self.fb = st
         def cyc(key, d):
             st[key] = (st[key] + d) % len(F.CLUBS)
             if st["home"] == st["away"]: st[key] = (st[key] + d) % len(F.CLUBS)
@@ -591,10 +605,12 @@ class Online:
             U.text(o, c[0], (0.1, yy - 0.01), 0.034, fg=c[2] + (1,))
             self._btn(o, "<", (-0.25, yy), lambda key=key: cyc(key, -1), w=0.03, h=0.03, sc=0.03)
             self._btn(o, ">", (0.5, yy), lambda key=key: cyc(key, 1), w=0.03, h=0.03, sc=0.03)
-        U.text(o, "MATCH LENGTH  %d min (90' on the clock)" % st["min"], (0, 0.2), 0.03, font=U.FONT_PLAIN)
-        for k, mn in enumerate((2, 4, 6, 8)):
-            self._btn(o, "%d MIN" % mn, (-0.39 + k * 0.26, 0.12), lambda mn=mn: (st.__setitem__("min", float(mn)), self.refresh()), w=0.1, h=0.03, sc=0.026,
-                      edge=(1, 0.9, 0.3, 1) if st["min"] == mn else PINK)
+        U.text(o, ("MATCH LENGTH  UNLIMITED - the clock counts up, end it any time with END MATCH (Esc)" if not st["min"] else
+                   "MATCH LENGTH  %d min (90' on the clock)" % st["min"]) + ("  -  your setting applies to everyone" if self.sess is not None and self.sess.role == "host" else ""),
+               (0, 0.2), 0.028, font=U.FONT_PLAIN)
+        for k, mn in enumerate((0, 4, 8, 12, 90)):
+            self._btn(o, "UNLIMITED" if not mn else "%d MIN" % mn, (-0.52 + k * 0.26, 0.12), lambda mn=mn: (st.__setitem__("min", float(mn)), self.refresh()),
+                      w=0.11, h=0.03, sc=0.024, edge=(1, 0.9, 0.3, 1) if st["min"] == mn else PINK)
         go = lambda versus=False: self.start_football(versus, st["min"], st["home"], st["away"])
         self._btn(o, "PLAY VS AI", (0, -0.02), go, edge=(0.3, 1.0, 0.45, 1))
         s = self.sess

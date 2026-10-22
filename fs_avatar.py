@@ -142,7 +142,9 @@ class Avatar(Person):
         top = tuple(c.get("kit_top") or COLS[c["top_col"]][1]); bot = tuple(c.get("kit_bottom") or COLS[c["bottom_col"]][1])
         dark = (top[0] * 0.7, top[1] * 0.7, top[2] * 0.7)
         m = NodePath("avatar"); m.reparent_to(self.np); m.set_h(180); self.model = m
-        long_sleeve = c["top"] in ("hoodie", "jacket")
+        kit = c.get("kit_top") is not None             # football kit: short-sleeve shirt, shorts, socks, boots
+        if kit: c = dict(c, top="jersey")
+        long_sleeve = c["top"] in ("hoodie", "jacket") and not kit
         # ---- torso (clothes) + neck/head (skin)
         t = Mesh()
         t.lathe([(0.8, 0.02, 0.02), (0.83, 0.12 * s, 0.085), (0.88, 0.16 * s, 0.105), (0.95, 0.168 * s, 0.112), (1.03, 0.158 * s, 0.106)], bot)
@@ -240,9 +242,17 @@ class Avatar(Person):
         for sd, sx in (("L", 1), ("R", -1)):
             lg = m.attach_new_node("leg" + sd); lg.set_pos(sx * 0.09 * s, 0, 0.93)
             l = Mesh()
-            l.tube((0, 0, 0), (0, 0, -0.45), 0.075 * s, 0.058, bot)
-            l.tube((0, 0, -0.45), (0, 0.0, -0.86), 0.057, 0.045, bot)
-            shoe = (0.95, 0.95, 0.95) if c["bottom_col"] != 0 else (0.12, 0.12, 0.13)
+            if kit:
+                sock = tuple(c.get("kit_socks") or bot)
+                l.tube((0, 0, 0), (0, 0, -0.27), 0.08 * s, 0.07, bot)                  # shorts
+                l.tube((0, 0, -0.2), (0, 0, -0.45), 0.066, 0.056, skin)                # knee
+                l.tube((0, 0, -0.45), (0, 0.0, -0.86), 0.058, 0.046, sock)             # socks
+                l.tube((0, 0, -0.47), (0, 0, -0.5), 0.06, 0.06, (1, 1, 1))             # sock band
+                shoe = (0.08, 0.08, 0.1)
+            else:
+                l.tube((0, 0, 0), (0, 0, -0.45), 0.075 * s, 0.058, bot)
+                l.tube((0, 0, -0.45), (0, 0.0, -0.86), 0.057, 0.045, bot)
+                shoe = (0.95, 0.95, 0.95) if c["bottom_col"] != 0 else (0.12, 0.12, 0.13)
             l.blob((0, -0.045, -0.885), (0.055, 0.12, 0.045), shoe); l.blob((0, -0.045, -0.92), (0.058, 0.125, 0.015), (0.2, 0.2, 0.22))
             _put(lg, "trousers", l, app, 0.1, 0.6)
         if "number" in c:            # football shirt number on the back
@@ -253,6 +263,8 @@ class Avatar(Person):
             except Exception: pass
             nn = tor.attach_new_node(tn); nn.set_pos(0, 0.128, 1.17); nn.set_scale(0.14); nn.set_h(180); nn.set_two_sided(True)
             nn.set_light_off(); nn.set_shader_off(); nn.set_depth_offset(1)
+            if kit:
+                txc = (0.08, 0.1, 0.25, 1) if sum(top) > 1.8 else (1, 1, 1, 1); tn.set_text_color(*txc)
         self.armR = m.find("**/armR"); self.armL = m.find("**/armL"); self.foreR = m.find("**/foreR"); self.foreL = m.find("**/foreL")
         self.handR = m.find("**/handR"); self.handL = m.find("**/handL"); self.scrub_t = None; self.arm_pose = None
         self.hand_np = {sd: (m.find("**/fingers" + sd), m.find("**/fist" + sd)) for sd in ("R", "L")}

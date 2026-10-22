@@ -230,9 +230,10 @@ class FP:
 
 class Match:
     """host / offline simulation (mode 'sim') or online client view (mode 'view')"""
-    def __init__(self, game, home_club=0, away_club=1, minutes_real=4.0, online=None, versus=False, mode="sim", setup=None, autoplay=False):
+    def __init__(self, game, home_club=0, away_club=1, minutes_real=0.0, online=None, versus=False, mode="sim", setup=None, autoplay=False):
         self.g = game; self.app = game.app; self.mode = mode; self.online = online; self.versus = versus
-        self.secs = max(20.0, minutes_real * 60.0); self.clock = 0.0; self.score = [0, 0]
+        # v1.0.5.1: minutes_real 0 = UNLIMITED (the default): the clock counts up, no full-time whistle, you end it yourself
+        self.secs = 0.0 if not minutes_real else max(20.0, minutes_real * 60.0); self.clock = 0.0; self.score = [0, 0]; self.ended_by = None
         self.clubs = [CLUBS[home_club % len(CLUBS)], CLUBS[away_club % len(CLUBS)]]
         self.root = self.app.render.attach_new_node("sfc-match"); self.fps = []; self.ball = [CX, CY, BALL_R]; self.bv = [0.0, 0.0, 0.0]
         self.owner = None; self.last_touch = None; self.state = "kickoff"; self.state_t = 2.0; self.kick_team = 0
@@ -426,7 +427,7 @@ class Match:
             mv, sp = self.local_input(); self.local.inp = {"mv": mv, "sp": sp}
         if self.state not in ("fulltime",):
             if self.state in ("play", "restart"): self.clock += dt
-            if self.clock >= self.secs and self.state == "play": self.full_time()
+            if self.secs and self.clock >= self.secs and self.state == "play": self.full_time()
         if self.state == "kickoff":
             self.state_t -= dt
             if self.state_t <= 0:
@@ -708,14 +709,33 @@ class Match:
         for f in self.fps:                # scorers celebrate, the others jog back
             if f.team == team: r = random.uniform(0, 6.28); f.vx, f.vy = math.cos(r) * 3, math.sin(r) * 3
 
+    def unlimited(self):
+        return not self.secs
+
     def minute(self):
+        if self.unlimited(): return self.clock / 60.0
         return min(90.0, self.clock / self.secs * 90.0)
+
+    def clock_text(self):
+        if self.unlimited():
+            c = int(self.clock); return "%d:%02d" % (c // 60, c % 60)
+        return "%d'" % int(self.minute())
+
+    def end_match(self):
+        """END MATCH (offline / host: final score for everyone) or LEAVE MATCH (online guest: AI takes the slot)"""
+        if self.done: return
+        if self.mode == "view":
+            self.done = True; self.state = "fulltime"; self.ended_by = "left"
+            try: self.g.online.fb_leave()
+            except Exception: pass
+            self._result(); return
+        self.ended_by = "ended"; self.full_time()
 
     def full_time(self):
         self.state = "fulltime"; self.state_t = 4.0; self.owner = None; self.done = True
         s = self.score
         res = "DRAW" if s[0] == s[1] else ("%s WIN" % self.clubs[0 if s[0] > s[1] else 1][0])
-        self.banner("FULL TIME  %d - %d   %s" % (s[0], s[1], res), 99)
+        self.banner("%s  %d - %d   %s" % ("FINAL SCORE" if self.ended_by else "FULL TIME", s[0], s[1], res), 99)
         print("SFC FULLTIME", s, self.goals, self.stats, flush=True)
         self.app.sfx("checkpoint", 0.8) if hasattr(self.app, "sfx") else None
         self._result()
@@ -774,14 +794,14 @@ class Match:
         U.button(bot, "TACKLE", (0.14, 0.1), lambda: self.act("tackle"), hint="R", edge=(1.0, 0.3, 0.3, 1), **sm)
         U.button(bot, "SPRINT", (0.42, 0.1), None, hint="Shift", edge=(0.4, 1.0, 0.5, 1),
                  press=lambda: setattr(self, "sprint_btn", True), release=lambda: setattr(self, "sprint_btn", False), **sm)
-        U.button(bot, "LEAVE MATCH", (0, 0.22), self.quit, w=0.16, h=0.035, scale=0.026, edge=(0.7, 0.7, 0.75, 1))
+        U.button(bot, "LEAVE MATCH" if self.mode == "view" else "END MATCH", (0, 0.22), self.end_match, hint="Esc menu", w=0.16, h=0.035, scale=0.026, edge=(1.0, 0.75, 0.3, 1))
         self.help = U.text(bot, "WASD move   SPACE pass   F shoot   R tackle   SHIFT sprint", (0, 0.29), 0.028, fg=(1, 1, 1, 0.85), font=U.FONT_PLAIN, shadow=(0, 0, 0, 1))
         self.stam = U.bar(bot, (-0.2, 0.035), 0.4, 0.008, 1.0, col=(0.4, 1.0, 0.5, 1))
 
     def _hud_update(self, dt):
         c0, c1 = self.clubs
         m = self.minute()
-        self.sb.setText("%s  %d - %d  %s     %d'" % (c0[1], self.score[0], self.score[1], c1[1], int(m)))
+        self.sb.setText("%s  %d - %d  %s     %s" % (c0[1], self.score[0], self.score[1], c1[1], self.clock_text()))
         if self.banner_t > 0:
             self.banner_t -= dt
             if self.banner_t <= 0: self.ban.setText("")
@@ -791,7 +811,8 @@ class Match:
         if self.result_ui is not None: return
         a = self.app; o = self.result_ui = DirectFrame(parent=a.aspect2d, frameColor=(0, 0, 0, 0.35), frameSize=(-4, 4, -2, 2))
         U.panel(o, -0.75, 0.75, -0.42, 0.3, edge=(0.95, 0.35, 0.62, 1))
-        U.text(o, "FULL TIME", (0, 0.2), 0.07, fg=(1, 0.9, 0.3, 1))
+        U.text(o, {"ended": "FINAL SCORE", "left": "YOU LEFT THE MATCH"}.get(self.ended_by, "FULL TIME"), (0, 0.2), 0.07, fg=(1, 0.9, 0.3, 1))
+        if self.unlimited(): U.text(o, "played %s" % self.clock_text(), (0, 0.145), 0.03, fg=(0.85, 0.9, 1, 1), font=U.FONT_PLAIN)
         U.text(o, "%s  %d - %d  %s" % (self.clubs[0][0], self.score[0], self.score[1], self.clubs[1][0]), (0, 0.1), 0.042, font=U.FONT_PLAIN)
         sc = ",  ".join("%s %d'" % (w, mn) for (t, w, mn) in self.goals[:8]) or "no goals"
         U.text(o, sc, (0, 0.02), 0.03, fg=(0.85, 0.9, 1, 1), font=U.FONT_PLAIN, wrap=44)
@@ -828,7 +849,7 @@ class Match:
         r = lambda v: round(v, 2)
         return {"c": r(self.clock), "s": self.score, "st": self.state, "b": [r(x) for x in self.ball],
                 "p": [[r(f.x), r(f.y), int(f.h), r(f.spd), 1 if f.kick_t > 0 else 0, 1 if f.stun > 0 else 0] for f in self.fps],
-                "bn": self.banner_txt if self.banner_t > 0 else "", "g": self.goals[-6:]}
+                "bn": self.banner_txt if self.banner_t > 0 else "", "g": self.goals[-6:], "eb": self.ended_by}
 
     def apply_snapshot(self, s):
         self.target = s
@@ -845,5 +866,7 @@ class Match:
                 dh = (p[2] - f.h + 180) % 360 - 180; f.h += dh * k; f.spd = p[3]; f.kick_t = 0.2 if p[4] else 0.0; f.stun = 0.3 if p[5] else 0.0
             for i in range(3): self.ball[i] += (s["b"][i] - self.ball[i]) * k
             if s.get("bn") and s["bn"] != self.banner_txt: self.banner(s["bn"], 2.5)
-            if s.get("st") == "fulltime" and not self.done: self.done = True; self.state = "fulltime"; self.banner("FULL TIME  %d - %d" % tuple(self.score), 99); self._result()
+            if s.get("st") == "fulltime" and not self.done:
+                self.done = True; self.state = "fulltime"; self.ended_by = s.get("eb")
+                self.banner("%s  %d - %d" % (("FINAL SCORE" if self.ended_by else "FULL TIME"),) + tuple(self.score), 99); self._result()
         self._sync(dt); self._camera(dt); self._hud_update(dt)

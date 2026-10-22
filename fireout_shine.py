@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.5"
+APP_VERSION = "1.0.5.1"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -606,6 +606,7 @@ class App(ShowBase):
             L("after taxi pos", round(me.x, 1), round(me.y, 1), "ride", bool(g.ride), "marker", m and m["id"], "prompt", g.prompt.getText())
         def app_open():
             g = self.game; g.toggle_phone(); g.online_app(); L("SHINE ONLINE open", g.online.ui is not None, "view", g.online.view)
+            L("no firewall button", not any("FIREWALL" in t for t in g.online.labels), "host button", any("HOST A SESSION" in t for t in g.online.labels))
             g.online.goto("custom"); g.online._set(dict(__import__("fs_avatar").preset(3))); g.online._done_custom()
             L("profile", g.online.profile["name"], g.online.profile["hair"])
         def friends():
@@ -704,9 +705,17 @@ class App(ShowBase):
                  ("RESET CAR DAMAGE", lambda: (self.hide_pause(), g.repair_car())),
                  ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls), ("PROFILE", self.show_profile),
                  ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
+        m = getattr(g, "match", None)
+        if m is not None:                     # v1.0.5.1: during a SHINE SFC 27 match the menu is about the match
+            def end():
+                self.hide_pause(); m.end_match()
+            items = (("RESUME", self.hide_pause), ("LEAVE MATCH" if m.mode == "view" else "END MATCH", end) if not m.done else ("LEAVE STADIUM", lambda: (self.hide_pause(), m.quit())),
+                     ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls),
+                     ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
+            U.text(o, "SHINE SFC 27  %d - %d   %s" % (m.score[0], m.score[1], m.clock_text()), (0, 0.44), 0.035, fg=U.CYAN)
         for i, (t, c) in enumerate(items):
-            U.button(o, t, (0, 0.43 - i * 0.11), c, w=0.33, h=0.046, scale=0.038,
-                     edge=(0.95, 0.35, 0.62, 1) if t == "SHINE ONLINE" else (0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if t == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if t == "FOOD" else U.PINK)))
+            U.button(o, t, (0, (0.33 if m is not None else 0.43) - i * 0.11), c, w=0.33, h=0.046, scale=0.038,
+                     edge=(0.95, 0.35, 0.62, 1) if t == "SHINE ONLINE" else (0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if t == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if t in ("FOOD", "END MATCH", "LEAVE MATCH") else U.PINK)))
         self.accept("escape", self.hide_pause)
 
     def show_food(self):
