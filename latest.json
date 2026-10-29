@@ -1,9 +1,9 @@
 {
-  "version": "1.0.5.2",
-  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.5.2",
-  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.2/FIREOUT-SHINE-Setup-1.0.5.2.exe",
-  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.2/FIREOUT-SHINE-Setup-1.0.5.2.exe",
-  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.2/FIREOUT-SHINE-1.0.5.2-Windows-x64.zip",
-  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.2/FIREOUT-SHINE-Portable.exe",
-  "notes": "Update fixes: the in-game updater starts the Setup detached with a clean environment, and portable copies relaunch fresh. This fixes the 'Failed to remove temporary directory (_MEI…)' warning and updates that didn't apply. Versions are compared with all four parts. The Setup closes a running copy before installing. Per-user, no admin. Gameplay is the same as 1.0.5.1."
+  "version": "1.0.5.3",
+  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.5.3",
+  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.3/FIREOUT-SHINE-Setup-1.0.5.3.exe",
+  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.3/FIREOUT-SHINE-Setup-1.0.5.3.exe",
+  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.3/FIREOUT-SHINE-1.0.5.3-Windows-x64.zip",
+  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.3/FIREOUT-SHINE-Portable.exe",
+  "notes": "Bumper jump fixed: car pitch now follows real acceleration through a smooth spring, and the plates move with the body. A = left and D = right when steering (keys, arrows and gamepad). New default car: the ENERASTIC MG EVO SEDAN, parked at Ana and Daniel's home, with slim swept LED headlights and C-shaped DRLs. Every car was rebuilt, with LODs. RTX and EX HD graphics modes are auto-detected and look almost the same. Seasonal FESTIVAL events come with a live feed. No bloom or glow. Per-user, no admin."
 }
