@@ -8,6 +8,13 @@ Neon street racing and police chases through **Shinko Ward**, an original night-
 Get the installer, portable exe or zip from the [latest release](https://github.com/Teobokki/fireout-shine/releases/latest).
 Also installable and auto-updated from **HYPERION DIGITAL EX**.
 
+## 1.0.5.3: ENERASTIC MG EVO SEDAN, RTX / EX HD graphics, seasonal FESTIVAL, bumper-jump fix
+- Bumper jump fixed: body pitch/roll now follow the real acceleration through a damped spring (no more one-frame snaps when the throttle changes), and the plates move with the body.
+- A = left, D = right when steering. The driving input and the gamepad stick were inverted.
+- New default car: ENERASTIC MG EVO SEDAN. All cars rebuilt (LED lights, multi-spoke wheels with brakes, interiors, clearcoat paint, real wheel arches) with traffic LODs.
+- Graphics modes RTX / EX HD, auto-detected on first launch. EX HD looks almost the same as RTX (same models, paint, lights, reflections, grade and city) and only trims tiny costs. There is no bloom or glow.
+- Seasonal FESTIVAL events with a live feed, a phone app, and remote events.json.
+
 ## 1.0.5.2: update fixes
 - In-game updates now start the Setup detached with a clean environment, and portable copies relaunch fresh. This fixes the "Failed to remove temporary directory (_MEI…)" warning and updates that didn't apply.
 - Versions are compared with all four parts.

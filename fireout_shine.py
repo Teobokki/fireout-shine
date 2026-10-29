@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.5.2"
+APP_VERSION = "1.0.5.3"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -44,6 +44,14 @@ load-display pandagl
 want-pstats false
 gl-coordinate-system default
 """)
+try:                                   # v1.0.5.3 graphics mode prc (depth 24, mipmaps, anisotropic)
+    import fs_gfx as _gfx
+    _st = {}
+    try: _st = json.load(open(os.path.join(DATA, "settings.json"), encoding="utf-8"))
+    except Exception: pass
+    _gfx.pre_window(_st)
+except Exception as _e:
+    log_error("gfx prc: %r" % _e)
 if os.environ.get("FS_WINSIZE"):       # test/QA override, e.g. FS_WINSIZE=1920x1080
     loadPrcFileData("", "win-size " + os.environ["FS_WINSIZE"].replace("x", " "))
 if os.path.exists(_icon):
@@ -58,6 +66,7 @@ from panda3d.core import (TextNode, TransparencyAttrib, WindowProperties, PTA_LV
 import fs_ui as U
 import fs_data as D
 from fs_world import World
+import fs_gfx
 
 
 def vtuple(v):
@@ -136,13 +145,19 @@ class App(ShowBase):
             self.settings.update(json.load(open(os.path.join(DATA, "settings.json"), encoding="utf-8")))
         except Exception:
             pass
+        if self.settings.get("gfx") not in ("RTX", "EXHD"):      # v1.0.5.3: first launch -> auto-detect the GPU
+            try: rn = self.win.get_gsg().get_driver_renderer() + " " + self.win.get_gsg().get_driver_vendor()
+            except Exception: rn = ""
+            self.settings["gfx"] = fs_gfx.detect(rn); self.gfx_detected = rn
+        self.settings["quality"] = 2          # v1.0.5.3: both modes keep full city detail
+        self.gfx = fs_gfx.Gfx(self)
         A = lambda *p: os.path.join(BASE, "assets", *p)
         self.jpfont = U.init_fonts(self.loader, A("ui_font.ttf"), A("ui_plain.ttf"), A("jp_font.otf"))
         U.SFX = lambda n: self.sfx(n, 0.5)
         DirectGuiGlobals.setDefaultClickSound(None); DirectGuiGlobals.setDefaultRolloverSound(None)
         DirectGuiGlobals.setDefaultFont(U.FONT_PLAIN) if U.FONT_PLAIN else None
         self.set_background_color(0.01, 0.01, 0.03, 1)
-        self.camLens.set_fov(70); self.camLens.set_near_far(0.2, 2400)
+        self.camLens.set_fov(70); self.camLens.set_near_far(0.25, 1800)     # v1.0.5.3: tighter depth range (24-bit) - no distant z-fighting
         # shared shader inputs
         self.campos = PTA_LVecBase3f.empty_array(1); self.campos_np = self.campos
         self.fogcol = Vec3(0.05, 0.03, 0.09); self.fogden = 0.0032
@@ -286,7 +301,9 @@ class App(ShowBase):
         if self.settings.get("fullscreen"):
             wp.set_fullscreen(True); wp.set_size(self.pipe.get_display_width(), self.pipe.get_display_height())
         else:
-            wp.set_fullscreen(False); wp.set_size(1280, 720)
+            ws = os.environ.get("FS_WINSIZE", "1280x720").lower().split("x")
+            try: wp.set_fullscreen(False); wp.set_size(int(ws[0]), int(ws[1]))
+            except Exception: wp.set_fullscreen(False); wp.set_size(1280, 720)
         if self.win and hasattr(self.win, "request_properties"):
             self.win.request_properties(wp)
 
@@ -309,6 +326,9 @@ class App(ShowBase):
         except Exception as e:
             log_error("bloom off: %r" % e)
         self.rain_on(bool(self.settings.get("rain")))
+        self.settings["quality"] = 2
+        try: self.gfx.apply()
+        except Exception as e: log_error("gfx apply: %r" % e)
 
     def rain_on(self, on):
         if on and getattr(self, "rain_np", None) is None:
@@ -349,6 +369,8 @@ class App(ShowBase):
 
     def _frame(self, task):
         cam = self.camera.get_pos(self.render); self.campos.set_element(0, cam)
+        try: self.gfx.frame(min(0.05, self.clock.get_dt()))
+        except Exception: pass
         if self.rain_np if hasattr(self, "rain_np") else None:
             self.rain_np.set_tex_offset(TextureStage.get_default(), 0.15 * task.time, 2.2 * task.time)
         self._poll_pad()
@@ -914,7 +936,7 @@ class App(ShowBase):
                 if after: after()
             b = U.button(o, "%s: %s" % (label, dict(opts).get(st.get(key), opts[0][1])), (0, z), f, w=0.45, h=0.042, scale=0.036)
         onoff = [(True, "ON"), (False, "OFF")]
-        cyc("Graphics quality", "quality", [(0, "LOW"), (1, "MEDIUM"), (2, "HIGH")], 0.15, self.apply_quality)
+        cyc("Graphics mode", "gfx", fs_gfx.MODES, 0.15, self.apply_quality)
         cyc("Rain", "rain", onoff, 0.05, self.apply_quality)
         cyc("On-screen buttons", "buttons", onoff, -0.05, lambda: self.game and (setattr(self.game, "btn_state", None), self.game.refresh_buttons()))
         cyc("NPC chatter", "chatter", onoff, -0.15)
@@ -922,7 +944,7 @@ class App(ShowBase):
         cyc("Fullscreen", "fullscreen", onoff, -0.35, self.apply_fullscreen)
         cyc("Time of day", "tod", [("cycle", "DAY/NIGHT CYCLE"), ("day", "LOCK DAY"), ("night", "LOCK NIGHT")], -0.45)
         cyc("Traffic density", "traffic", [("low", "LOW"), ("normal", "NORMAL"), ("high", "HIGH")], -0.55)
-        U.text(o, "Graphics quality + traffic density change the amount of cars and pedestrians.", (0, -0.62), 0.026, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.6))
+        U.text(o, "RTX = full cinematic. EX HD = the same look with tiny savings (lighter reflections, slightly shorter draw distance). Anisotropic filtering applies on restart.", (0, -0.62), 0.024, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.6))
         def done():
             self.save_settings(); o.destroy()
             if back: back()

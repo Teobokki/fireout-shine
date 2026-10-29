@@ -28,6 +28,7 @@ FRAG = """#version 120
 uniform sampler2D p3d_Texture0;
 uniform sampler2D envmap;
 uniform sampler2D normalmap;
+uniform samplerCube envcube; uniform float use_cube; uniform float clearcoat;
 uniform vec4 p3d_ColorScale;
 uniform struct { vec4 baseColor; vec4 emission; float roughness; float metallic; } p3d_Material;
 uniform vec3 campos;
@@ -66,6 +67,10 @@ void main() {
   vec3 R = reflect(-V, N);
   vec2 euv = vec2(atan(R.y, R.x) / 6.2831 + 0.5, clamp(0.5 - asin(clamp(R.z, -1.0, 1.0)) / 3.1416, 0.01, 0.99));
   vec3 env = mix(texture2D(envmap, euv).rgb, texture2D(envday, vec2(euv.x, 1.0 - euv.y)).rgb, dayk);
+  // v1.0.5.3 RTX: dynamic cube-map of the real surroundings around the player car (EX HD: static environment map)
+  if (use_cube > 0.5) env = mix(env, textureCube(envcube, R).rgb * 1.15, 0.8);
+  // v1.0.5.3 realism: the night environment is less saturated / dimmer, so white and silver cars stay white (no lilac paint)
+  env = mix(vec3(dot(env, vec3(0.3, 0.55, 0.15))), env, mix(0.55, 0.9, dayk)) * mix(0.7, 1.0, dayk);
   float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   float spec_amt = gloss * mix(0.25, 1.0, p3d_Material.metallic);
   // v1.0.4: skin / cloth (sheen) get only a faint grazing reflection - no glowing white outline on arms and legs
@@ -73,11 +78,16 @@ void main() {
   vec3 col = diff * (1.0 - spec_amt * 0.5) + env * (fk + spec_amt * 0.35) * mix(vec3(1.0), c + 0.25, p3d_Material.metallic);
   vec3 H = normalize(L + V);
   col += vec3(0.7, 0.75, 1.0) * pow(max(dot(N, H), 0.0), mix(8.0, 90.0, gloss)) * gloss * 0.6;
+  // v1.0.5.3 clearcoat (car paint): extra sharp lobe + fresnel-weighted mirror reflection on top of the metallic base
+  float cfr = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+  col = mix(col, col * (1.0 - cfr * 0.5) + env * cfr * 1.1, clearcoat);
+  col += vec3(1.0, 0.98, 0.95) * pow(max(dot(N, H), 0.0), 420.0) * clearcoat * 1.4;
   // (v1.0.4: the pink skin/cloth rim light was removed - it made legs and arms look like they were glowing)
   col += p3d_Material.emission.rgb * emitboost;
   col *= p3d_ColorScale.rgb;
   col = min(col, vec3(0.82) + 0.18 * (1.0 - exp(-(max(col - vec3(0.82), vec3(0.0))) * 4.0)));   // soft highlight roll-off instead of clipping to white
   float f = 1.0 - exp(-fogden * fogden * vdist * vdist);
+  f *= mix(1.0, 0.55, clamp(wpos.z / 90.0, 0.0, 1.0));      // v1.0.5.3: height haze gradient (denser near the street)
   col = mix(col, mix(fogcol, fogday, dayk), clamp(f, 0.0, 1.0));
   gl_FragColor = vec4(col, base.a * p3d_ColorScale.a);
 }
@@ -92,7 +102,7 @@ def shader():
     return _cache["s"]
 
 
-def apply(np_, app, gloss=0.6, tex=False, nmap=None, sheen=0.0, emitboost=1.0, tint=(1, 1, 1, 1)):
+def apply(np_, app, gloss=0.6, tex=False, nmap=None, sheen=0.0, emitboost=1.0, tint=(1, 1, 1, 1), clearcoat=0.0):
     np_.set_shader(shader())
     np_.set_shader_input("envmap", app.envtex)
     np_.set_shader_input("normalmap", nmap or app.flat_nmap)
@@ -106,3 +116,4 @@ def apply(np_, app, gloss=0.6, tex=False, nmap=None, sheen=0.0, emitboost=1.0, t
     np_.set_shader_input("emitboost", emitboost)
     np_.set_shader_input("tint", tint)
     np_.set_shader_input("wspos_view", (0, 0, 0))
+    np_.set_shader_input("clearcoat", clearcoat)

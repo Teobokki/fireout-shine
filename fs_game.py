@@ -1,5 +1,6 @@
 """FIREOUT SHINE gameplay session: open world, duo (ANA & DANIEL), driving, jacking, police, races, phone, FRGARAGE."""
-import math, os, random, json, time
+import math
+import fs_gfx, os, random, json, time
 from panda3d.core import (Vec3, Point3, TextNode, CardMaker, TransparencyAttrib, ColorBlendAttrib, Texture, TextureStage,
                           NodePath, Filename, SamplerState, TransformState, KeyboardButton)
 from direct.gui.DirectGui import DirectFrame, DirectButton, DirectEntry, DGG
@@ -7,8 +8,8 @@ from direct.gui.OnscreenImage import OnscreenImage
 import fs_data as D
 import fs_ui as U
 from fs_vehicle import Car, collide_cars, TRAFFIC_KINDS, TRAFFIC_COLS
-PLAYER_CARS = ["gts", "coupe", "sedan", "hatch", "kei", "suv", "van"]   # FRGARAGE car selector (original designs)
-CAR_TYPES = {"gts": "Supercar", "coupe": "JDM coupe", "sedan": "Sedan (4-door)", "hatch": "Hatchback", "kei": "Kei car", "suv": "SUV", "van": "Van"}
+PLAYER_CARS = ["evo", "gts", "coupe", "sedan", "hatch", "kei", "suv", "van"]   # FRGARAGE car selector (original designs)
+CAR_TYPES = {"evo": "Sports sedan  * RECOMMENDED *", "gts": "Supercar", "coupe": "JDM coupe", "sedan": "Sedan (4-door)", "hatch": "Hatchback", "kei": "Kei car", "suv": "SUV", "van": "Van"}
 from fs_people import Person, Ped
 from fs_ai import TrafficAI, RacerAI, PoliceAI, ResponderAI, graph_path, wrap
 
@@ -57,7 +58,10 @@ class Game:
         self.outfits = {"ana": self.outfit, "daniel": so.get("daniel", "default") if isinstance(so.get("daniel"), str) else "default"}
         self.home = None
         self.camapp = None          # v1.0.3: phone CAMERA app state (selfie / rear)
-        self.player_kind = sd.get("car", "gts") if sd.get("car") in PLAYER_CARS else "gts"
+        self.player_kind = sd.get("car", "evo") if sd.get("car") in PLAYER_CARS else "evo"
+        self.evo_given = bool(sd.get("evo_v1053"))
+        if not self.evo_given:          # v1.0.5.3: the ENERASTIC SEDAN EVO becomes the default / recommended car once (old cars stay in FRGARAGE)
+            self.player_kind = "evo"; self.evo_given = True; self._evo_news = True
         x, y, h = D.SPAWN
         self.chars = {"ana": Person(self, "ana", x - 1.0, y - 4.0, 180), "daniel": Person(self, "daniel", x + 1.0, y - 4.2, 180)}
         for k, p in self.chars.items(): self.bench(p, k not in (self.active, self.mate))     # v1.0.4: two on screen, the third waits off-screen
@@ -70,6 +74,12 @@ class Game:
         self.own = self.spawn_car(self.player_kind, x, y, h, role="player", parked=True); self.own.owned = True
         self.time_scale = 1.0; self.tod = 14.5
         self.markers = []; self.spawn_markers(); self.build_pois(); self.build_hud(); self.bind_keys()
+        try:                                    # v1.0.5.3 seasonal events + live feed
+            from fs_events import Events
+            self.events = Events(self, sd.get("events"))
+            if getattr(self, "_evo_news", False): self.events.notify("New car unlocked", "ENERASTIC MG EVO SEDAN - now your car (FRGARAGE)", small=False)
+        except Exception as e:
+            self.app.log_error(e); self.events = None
         self.arsenal = Arsenal(self, sd); self.btn_state = None
         # v1.0.5 SHINE ONLINE + SHINE SFC 27
         self.match = None; self.guest = False; self._save = sd
@@ -87,7 +97,7 @@ class Game:
     # ================================================================ spawning
     def spawn_car(self, kind, x, y, h, role="traffic", parked=False, paint=None, plate=""):
         cfg = self.cars_cfg.get(kind, {}) if role == "player" else {}
-        paint = cfg.get("paint", paint or ((0.20, 0.22, 0.28) if role == "player" else random.choice(TRAFFIC_COLS)))
+        paint = cfg.get("paint", paint or (((0.62, 0.02, 0.04) if kind == "evo" else (0.20, 0.22, 0.28)) if role == "player" else random.choice(TRAFFIC_COLS)))
         if kind == "police": paint = (0.92, 0.92, 0.94)
         if kind == "ambulance": paint = (0.95, 0.95, 0.95)
         if kind == "taxi" and role != "player": paint = (0.95, 0.75, 0.1)
@@ -166,7 +176,7 @@ class Game:
         q = self.app.settings.get("quality", 2)
         # v1.0.4 TRAFFIC DENSITY (LOW / NORMAL / HIGH, default HIGH): a busy city - spawned around you out of view, despawned far away
         dens = {"low": 1.0, "normal": 2.0, "high": 4.0}.get(self.app.settings.get("traffic", "high"), 4.0)
-        want = int({0: 12, 1: 20, 2: 26}.get(q, 20) * dens)
+        want = int({0: 12, 1: 20, 2: 26}.get(q, 20) * dens * fs_gfx.traffic_scale(self.app))
         traffic = [c for c in self.cars if isinstance(c.ai, TrafficAI)]
         nodes_ = [n for n, (x_, y_) in w.nodes.items() if abs(x_ - px) < 140 and abs(y_ - py) < 140] or list(w.nodes)
         seed = len(traffic) < want * 0.4      # first fill (load / teleport / taxi skip): fill the streets straight away
@@ -1010,6 +1020,7 @@ class Game:
             apps = [("phone_icon_contacts.png", "Contacts", lambda: self.phone_screen("contacts")), ("phone_icon_taxi.png", "JP TAXI", lambda: self.phone_screen("taxi")),
                     ("phone_icon_camera.png", "CAMERA", self.open_camera), ("ix_icon_misto2.png", "MISTO 2", lambda: fs_misto.open_app(self))]
             if hasattr(self, "online_app"): apps.append(("ix_icon_online.png", "ONLINE", self.online_app))
+            if getattr(self, "events", None) is not None: apps.append(("ix_icon_festival.png", "FESTIVAL", lambda: self.phone_screen("festival")))
             for n, (ic, lbl, fn) in enumerate(apps):
                 x = cx + ((n % 3) - 1) * 0.15; yo = (n // 3) * 0.17
                 b = DirectButton(parent=root, image=T(ic), image_scale=0.062 if ic.startswith("phone") else 0.05, relief=None, pos=(x, 0, top - 0.42 - yo), command=fn)
@@ -1017,6 +1028,9 @@ class Game:
                 U.text(root, lbl, (x, top - 0.52 - yo), 0.027, font=U.FONT_PLAIN); items.append((lbl, fn))
             btn("MAP", lambda: (self.toggle_phone(), self.toggle_map()), 0.76)
             btn("CLOSE", self.toggle_phone, 0.86)
+        elif which == "festival" and getattr(self, "events", None) is not None:
+            self.events.page(root, cx, top, btn, W)
+            btn("BACK", lambda: self.phone_screen("home"), 0.86)
         elif which == "contacts":
             W("CONTACTS", 0.30, 0.045, fg=acc, font=U.FONT)
             btn("Emergency Services  119", self.call_emergency, 0.42, w=0.23)
@@ -1208,6 +1222,7 @@ class Game:
             a.render2d.hide()                               # no HUD / viewfinder in the picture
             a.graphicsEngine.render_frame(); a.graphicsEngine.render_frame()
             ok = a.win.save_screenshot(Filename.from_os_specific(path))
+            if ok and getattr(self, "events", None) is not None: self.events.photo_taken()
         except Exception as e:
             ok = False; print("camera save failed", e)
         finally:
@@ -1829,7 +1844,8 @@ class Game:
         U.text(o, "FRGARAGE", (0, 0.68), 0.085, fg=U.CYAN)
         U.text(o, "%s  -  %s & %s" % (c.spec["name"], NAMES["ana"], NAMES["daniel"]), (0, 0.6), 0.032, font=U.FONT_PLAIN)
         U.text(o, "PAINT", (-0.38, 0.5), 0.04, fg=U.PINK, align=TextNode.A_left)
-        for k, (nm, col) in enumerate(PAINTS):
+        ev_p = [(p_[0], tuple(p_[1])) for p_ in (self.events.paints if getattr(self, "events", None) is not None else [])]
+        for k, (nm, col) in enumerate(PAINTS + ev_p):
             x = -0.3 + (k % 5) * 0.15; y = 0.4 - (k // 5) * 0.16
             DirectButton(parent=o, frameColor=col + (1,), frameSize=(-0.055, 0.055, -0.055, 0.055), pos=(x, 0, y), relief=DGG.FLAT,
                          command=self.garage_paint, extraArgs=[col], pressEffect=1)
@@ -2192,6 +2208,8 @@ class Game:
         if self.taxi: dot(self.taxi.x, self.taxi.y, (1, 0.8, 0.15, 1), 0.014)
         if self.medic: dot(self.medic.x, self.medic.y, (1, 1, 1, 1), 0.014)
         if self.waypoint: dot(self.waypoint[0], self.waypoint[1], (0.3, 1, 0.4, 1), 0.016)
+        if getattr(self, "events", None) is not None:
+            for (ex, ey, ec, _) in self.events.map_points(): dot(ex, ey, ec, 0.015)
         if self.pcar is None and self.own and not self.own.dead: dot(self.own.x, self.own.y, (0.2, 1, 0.9, 0.9), 0.012)
         for i in range(k, len(self.mm_dots)): self.mm_dots[i].hide()
         for (m, ic) in zip(self.markers + self.pois, self.mm_icons):
@@ -2327,10 +2345,13 @@ class Game:
         up = self.down("w", "arrow_up", "v_up"); dn = self.down("s", "arrow_down", "v_down")
         lf = self.down("a", "arrow_left", "v_left"); rt = self.down("d", "arrow_right", "v_right")
         pad = getattr(self.app, "pad", None)
-        thr = (1.0 if up else 0.0) - (1.0 if dn else 0.0); st = (1.0 if lf else 0.0) - (1.0 if rt else 0.0)
+        # v1.0.5.3 fix: A / left arrow / stick left = steer LEFT, D / right arrow / stick right = steer RIGHT.
+        # The car model turns right for steer > 0 (heading decreases, front wheels set_h(-28)), but the input used +1 for A,
+        # so A steered right and D left (and the gamepad stick was inverted the same way).
+        thr = (1.0 if up else 0.0) - (1.0 if dn else 0.0); st = (1.0 if rt else 0.0) - (1.0 if lf else 0.0)
         if pad:
             try:
-                thr += pad.get("rt", 0) - pad.get("lt", 0); st += -pad.get("lx", 0)
+                thr += pad.get("rt", 0) - pad.get("lt", 0); st += pad.get("lx", 0)
             except Exception: pass
         c.throttle = max(-1.0, min(1.0, thr))
         tgt = max(-1.0, min(1.0, st))
@@ -2407,6 +2428,9 @@ class Game:
         self.update_ride(dt)
         self.update_chatter(dt)
         self.update_pickups(dt)
+        if getattr(self, "events", None) is not None:
+            try: self.events.update(dt)
+            except Exception as e: self.app.log_error(e); self.events = None
         self.arsenal.update(dt)
         self.pop_t -= dt
         if self.pop_t <= 0: self.pop_t = 0.5; self.populate()
@@ -2446,7 +2470,7 @@ class Game:
     def save(self):
         d = {"cash": self.cash, "tokens": [list(t) for t in self.tokens], "best": self.best, "cars": self.cars_cfg,
              "speedcams": self.cam_cams, "active": self.active, "mate": self.mate, "outfit": self.outfit, "outfits": dict(self.outfits), "photos": list(getattr(self, "photos", [])), "ledger": [list(x) for x in getattr(self, "ledger", [])][-30:],
-             "owned": getattr(self, "owned", {}), "news": [list(x) for x in getattr(self, "news", [])][-10:], "misto": getattr(self, "misto", {}), "drunk": getattr(self, "drunk", 0.0), "car": self.player_kind, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": self.real_names(), "online": self.online.save() if hasattr(self, "online") else {}, "version": self.app.VERSION}
+             "owned": getattr(self, "owned", {}), "news": [list(x) for x in getattr(self, "news", [])][-10:], "misto": getattr(self, "misto", {}), "drunk": getattr(self, "drunk", 0.0), "car": self.player_kind, "evo_v1053": True, "events": self.events.save() if getattr(self, "events", None) is not None else {}, **(self.arsenal.save() if hasattr(self, "arsenal") else {}), "names": self.real_names(), "online": self.online.save() if hasattr(self, "online") else {}, "version": self.app.VERSION}
         if getattr(self, "guest", False) and d.get("active") not in CREW: d["active"] = "ana"
         try: self.app.write_save(d)
         except Exception as e: self.app.log_error(e)
@@ -2458,6 +2482,9 @@ class Game:
         return [n["ana"], n["daniel"]]
 
     def destroy(self):
+        if getattr(self, "events", None) is not None:
+            try: self.events.destroy()
+            except Exception as e: self.app.log_error(e)
         if getattr(self, "match", None) is not None:
             try: self.match.quit()
             except Exception as e: self.app.log_error(e)

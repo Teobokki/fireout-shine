@@ -595,13 +595,80 @@ class World:
                 elif side == 1: px, py = x1 - D.SIDEWALK - 0.5, rng.uniform(y0 + 6, y1 - 6); ang = 90
                 elif side == 2: px, py = rng.uniform(x0 + 6, x1 - 6), y1 - D.SIDEWALK - 0.5; ang = 0
                 else: px, py = x0 + D.SIDEWALK + 0.5, rng.uniform(y0 + 6, y1 - 6); ang = 90
-                c = rng.choice([(0.9, 0.95, 1.3), (1.3, 0.4, 0.4), (0.4, 1.0, 1.3)])
-                e.box(px - 0.5, py - 0.5, 0.15, px + 0.5, py + 0.5, 2.0, (c[0], c[1], c[2], 1))
+                self.vending(px, py, ang, ch, rng)
+        # v1.0.5.3 sidewalk life: parked bicycles, bollards, A-frame shop boards (all solid geometry, no glow)
+        if dist in ("akari", "sakura", "crossing", "tower", "kurogane"):
+            fl = self.M("flat", ch)
+            for _ in range(3 if dist != "kurogane" else 1):
+                side = rng.randrange(4)
+                if side == 0: px, py, ang = rng.uniform(x0 + 8, x1 - 8), y0 + D.SIDEWALK - 0.7, 0
+                elif side == 1: px, py, ang = x1 - D.SIDEWALK + 0.7, rng.uniform(y0 + 8, y1 - 8), 90
+                elif side == 2: px, py, ang = rng.uniform(x0 + 8, x1 - 8), y1 - D.SIDEWALK + 0.7, 0
+                else: px, py, ang = x0 + D.SIDEWALK - 0.7, rng.uniform(y0 + 8, y1 - 8), 90
+                for k in range(rng.randint(2, 4)):
+                    o = (k - 1.5) * 0.55
+                    self.bicycle(fl, px + (o if ang == 0 else 0), py + (o if ang == 90 else 0), ang, rng)
+            for _ in range(2):
+                side = rng.randrange(2)
+                px = rng.uniform(x0 + 6, x1 - 6); py = y0 + 0.5 if side == 0 else y1 - 0.5
+                for k in range(4):
+                    bx = px + k * 1.6
+                    fl.box(bx - 0.09, py - 0.09, 0, bx + 0.09, py + 0.09, 0.85, (0.55, 0.56, 0.58, 1)); fl.box(bx - 0.1, py - 0.1, 0.62, bx + 0.1, py + 0.1, 0.7, (0.85, 0.65, 0.1, 1))
+            if dist in ("akari", "crossing", "sakura"):
+                for _ in range(2):
+                    px = rng.uniform(x0 + 6, x1 - 6); py = y0 + D.SIDEWALK - 1.2
+                    c = rng.choice([(0.12, 0.12, 0.14), (0.55, 0.1, 0.08), (0.9, 0.88, 0.82)])
+                    fl.quad((px - 0.3, py - 0.25, 0), (px + 0.3, py - 0.25, 0), (px + 0.3, py, 0.95), (px - 0.3, py, 0.95), (c[0], c[1], c[2], 1), n=(0, -1, 0.3))
+                    fl.quad((px + 0.3, py + 0.25, 0), (px - 0.3, py + 0.25, 0), (px - 0.3, py, 0.95), (px + 0.3, py, 0.95), (c[0], c[1], c[2], 1), n=(0, 1, 0.3))
         # trees in the residential district
         if dist == "sakura":
             for k in range(4):
                 px = x0 + 10 + k * (x1 - x0 - 20) / 3; py = y0 + 1.6
                 self.tree(px, py, ch, pink=True)
+
+    def vending(self, px, py, ang, ch, rng):
+        """v1.0.5.3: realistic vending machine - painted cabinet, lit drinks window (emissive, no halo), dark coin/slot panel."""
+        fl = self.M("flat", ch); e = self.M("emit", ch)
+        body = rng.choice([(0.85, 0.86, 0.88), (0.70, 0.08, 0.08), (0.08, 0.25, 0.55), (0.92, 0.92, 0.9)])
+        w, d, h = 0.95, 0.75, 1.85
+        if ang == 0: x0, x1, y0, y1 = px - w / 2, px + w / 2, py - d / 2, py + d / 2
+        else: x0, x1, y0, y1 = px - d / 2, px + d / 2, py - w / 2, py + w / 2
+        fl.box(x0, y0, 0.0, x1, y1, h, (body[0], body[1], body[2], 1))
+        fl.box(x0 - 0.02, y0 - 0.02, h, x1 + 0.02, y1 + 0.02, h + 0.06, (0.2, 0.2, 0.22, 1))
+        lit = rng.choice([(1.25, 1.2, 1.05), (1.1, 1.15, 1.25)])
+        for side in (-1, 1):       # both faces get a window (the machine stands back to the wall or free)
+            if ang == 0:
+                yy = (y0 - 0.012) if side < 0 else (y1 + 0.012)
+                e.quad((x0 + 0.08, yy, 0.95), (x1 - 0.08, yy, 0.95), (x1 - 0.08, yy, 1.72), (x0 + 0.08, yy, 1.72), (lit[0], lit[1], lit[2], 1), n=(0, side, 0))
+                fl.quad((x0 + 0.08, yy, 0.35), (x1 - 0.08, yy, 0.35), (x1 - 0.08, yy, 0.85), (x0 + 0.08, yy, 0.85), (0.05, 0.05, 0.06, 1), n=(0, side, 0))
+            else:
+                xx = (x0 - 0.012) if side < 0 else (x1 + 0.012)
+                e.quad((xx, y0 + 0.08, 0.95), (xx, y1 - 0.08, 0.95), (xx, y1 - 0.08, 1.72), (xx, y0 + 0.08, 1.72), (lit[0], lit[1], lit[2], 1), n=(side, 0, 0))
+                fl.quad((xx, y0 + 0.08, 0.35), (xx, y1 - 0.08, 0.35), (xx, y1 - 0.08, 0.85), (xx, y0 + 0.08, 0.85), (0.05, 0.05, 0.06, 1), n=(side, 0, 0))
+        self.grid.add_circle(px, py, 0.6, "p")
+        self.ground_pool(px, py, 2.2, (lit[0] * 0.6, lit[1] * 0.6, lit[2] * 0.6, 0.18))
+
+    def bicycle(self, mb, px, py, ang, rng):
+        """parked city bicycle (mamachari): two spoked rings, frame, basket, saddle."""
+        col = rng.choice([(0.75, 0.75, 0.78), (0.1, 0.1, 0.12), (0.55, 0.08, 0.1), (0.15, 0.3, 0.55), (0.9, 0.85, 0.75)])
+        ca, sa = (1, 0) if ang == 90 else (0, 1)      # bike along y when ang == 0? -> faces the street
+        def P(u, z, v=0.0):            # u along the bike, v sideways
+            return (px + ca * v + sa * u, py + sa * v + ca * u, z)
+        r = 0.33
+        for wc in (-0.52, 0.52):
+            n = 10
+            for i in range(n):
+                a0, a1 = i / n * 6.2832, (i + 1) / n * 6.2832
+                pa = P(wc + math.cos(a0) * r, r + math.sin(a0) * r); pb = P(wc + math.cos(a1) * r, r + math.sin(a1) * r)
+                mb.box(min(pa[0], pb[0]) - 0.02, min(pa[1], pb[1]) - 0.02, min(pa[2], pb[2]) - 0.02, max(pa[0], pb[0]) + 0.02, max(pa[1], pb[1]) + 0.02, max(pa[2], pb[2]) + 0.02, (0.05, 0.05, 0.05, 1))
+        def bar(u0, z0, u1, z1, c, t=0.025):
+            a, b = P(u0, z0), P(u1, z1)
+            mb.box(min(a[0], b[0]) - t, min(a[1], b[1]) - t, min(a[2], b[2]) - t, max(a[0], b[0]) + t, max(a[1], b[1]) + t, max(a[2], b[2]) + t, c)
+        c4 = (col[0], col[1], col[2], 1)
+        bar(-0.52, 0.33, -0.1, 0.36, c4); bar(-0.1, 0.36, 0.42, 0.72, c4); bar(-0.1, 0.36, -0.15, 0.78, c4); bar(0.42, 0.72, 0.52, 0.33, c4)
+        bar(-0.22, 0.80, -0.06, 0.84, (0.08, 0.06, 0.05, 1), 0.04)                 # saddle
+        bar(0.36, 0.95, 0.48, 0.95, (0.3, 0.3, 0.32, 1), 0.02)                     # handlebar
+        mb.box(*[min(a, b) for a, b in zip(P(0.50, 0.78, -0.16), P(0.80, 0.98, 0.16))], *[max(a, b) for a, b in zip(P(0.50, 0.78, -0.16), P(0.80, 0.98, 0.16))], (0.6, 0.6, 0.62, 1))   # basket
 
     def tree(self, x, y, ch, pink=False, palm=False, pine=False):
         t = self.M("flat", ch)
