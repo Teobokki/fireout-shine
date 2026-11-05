@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.5.4"
+APP_VERSION = "1.0.5.5"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -115,7 +115,7 @@ def check_update():
 
 
 DEFAULT_SETTINGS = {"traffic": "high", "tod": "cycle", "master": 0.9, "sfx_volume": 0.8, "music_volume": 0.55, "voice_volume": 0.9, "quality": 1, "rain": False,
-                    "buttons": True, "chatter": True, "subtitles": True, "fullscreen": False, "force_season": "", "rec_sys_sound": False}
+                    "buttons": True, "chatter": True, "subtitles": True, "fullscreen": False, "force_season": ""}
 CREDITS = [
     ("FIREOUT SHINE  /  ファイアアウト・シャイン", None),
     ("Published by", PUBLISHER),
@@ -200,7 +200,6 @@ class App(ShowBase):
         try:
             from fs_recorder import Recorder
             self.screen_rec = Recorder(self)
-            self.screen_rec.sys_sound = bool(self.settings.get("rec_sys_sound", False))
         except Exception as e:
             log_error(e); self.screen_rec = None
         self.accept("f9", self.toggle_recording)
@@ -748,7 +747,7 @@ class App(ShowBase):
         g = self.game; g.paused = True
         o = self.pause_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.6), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
         # taller panel so EX SCREEN RECORDER 2026 fits on the same pause menu
-        U.panel(o, -0.48, 0.48, -0.95, 0.78)
+        U.panel(o, -0.48, 0.48, -0.90, 0.78)
         U.text(o, "PAUSED", (0, 0.66), 0.07, fg=U.PINK); U.text(o, "一時停止", (0, 0.595), 0.034, fg=U.CYAN, font=self.jpfont)
         items = (("RESUME", self.hide_pause), ("ADD MONEY", self.show_add_money), ("CLOTHING", self.show_clothing), ("FOOD", self.show_food), ("SHINE ONLINE", lambda: (self.hide_pause(), g.online.open())), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
                  ("RESET CAR DAMAGE", lambda: (self.hide_pause(), g.repair_car())),
@@ -769,9 +768,10 @@ class App(ShowBase):
             U.button(o, lab, (0, top - i * step), c, w=0.33, h=0.034, scale=0.032,
                      edge=(0.95, 0.35, 0.62, 1) if lab == "SHINE ONLINE" else (0.3, 1.0, 0.45, 1) if lab == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if lab == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if lab in ("FOOD", "END MATCH", "LEAVE MATCH") else U.PINK)))
         # ---- EX SCREEN RECORDER 2026 (on this pause menu, not a separate screen)
+        # v1.0.5.5: no system-sound toggle — game/system audio is always captured; never a microphone
         y0 = top - len(items) * step - 0.02
-        DirectFrame(parent=o, frameColor=(0.12, 0.04, 0.06, 0.92), frameSize=(-0.40, 0.40, y0 - 0.22, y0 + 0.02), relief=DGG.FLAT)
-        DirectFrame(parent=o, frameColor=(0.95, 0.25, 0.35, 1), frameSize=(-0.40, -0.385, y0 - 0.22, y0 + 0.02), relief=DGG.FLAT)
+        DirectFrame(parent=o, frameColor=(0.12, 0.04, 0.06, 0.92), frameSize=(-0.40, 0.40, y0 - 0.18, y0 + 0.02), relief=DGG.FLAT)
+        DirectFrame(parent=o, frameColor=(0.95, 0.25, 0.35, 1), frameSize=(-0.40, -0.385, y0 - 0.18, y0 + 0.02), relief=DGG.FLAT)
         U.text(o, "EX SCREEN RECORDER 2026", (0, y0 - 0.01), 0.030, fg=(1.0, 0.40, 0.45, 1))
         rec = getattr(self, "screen_rec", None)
         if rec is None:
@@ -786,13 +786,7 @@ class App(ShowBase):
             self._rec_btn = U.button(o, "STOP RECORDING" if active else "START RECORDING", (0, y0 - 0.115), do_rec,
                                      w=0.30, h=0.032, scale=0.030, edge=(0.95, 0.25, 0.30, 1),
                                      col=(0.25, 0.06, 0.08, 0.95) if active else (0.14, 0.05, 0.08, 0.95))
-            def tog_sound():
-                rec.sys_sound = not rec.sys_sound
-                self.settings["rec_sys_sound"] = bool(rec.sys_sound); self.save_settings()
-                self.hide_pause(); self.show_pause()
-            U.button(o, "System sound: %s" % ("ON" if rec.sys_sound else "OFF"), (-0.18, y0 - 0.175), tog_sound,
-                     w=0.16, h=0.026, scale=0.024, edge=(0.6, 0.6, 0.7, 1), col=(0.10, 0.08, 0.12, 0.95))
-            U.text(o, "No mic  ·  F9  ·  Downloads", (0.18, y0 - 0.182), 0.018, fg=(0.7, 0.7, 0.75, 1), font=U.FONT_PLAIN)
+            U.text(o, "System sound on  ·  No mic  ·  F9  ·  Downloads", (0, y0 - 0.155), 0.018, fg=(0.7, 0.7, 0.75, 1), font=U.FONT_PLAIN)
             if active:
                 self.task_mgr.add(self._pause_rec_tick, "pause-rec-tick")
         self.accept("escape", self.hide_pause)

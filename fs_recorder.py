@@ -1,14 +1,15 @@
 """EX SCREEN RECORDER 2026 - records FIREOUT SHINE's own rendered frames to an H.264 MP4.
 Saves finished clips to the player's Downloads folder (%USERPROFILE%/Downloads on Windows).
-No microphone. System-sound toggle is offered in the pause UI (off by default); frame capture is
-the game view itself and needs no admin rights.
+No microphone. Game / system audio (WASAPI loopback of what you hear) is always captured when
+available; there is no on/off toggle. Frame capture is the game view itself and needs no admin.
 ©2026 EX Inc./HYPERION DIGITAL ©2026"""
-import os, sys, time, threading, subprocess, shutil, collections
+import os, sys, time, threading, subprocess, shutil, collections, tempfile, wave
 from panda3d.core import Texture, GraphicsOutput
 
 BRAND = "EX SCREEN RECORDER 2026"
 FPS = 30
 MAX_QUEUE = 24
+SR = 48000
 
 
 def downloads_dir():
@@ -46,6 +47,71 @@ def ffmpeg_exe(base=None):
     return shutil.which("ffmpeg")
 
 
+def _write_wav(path, pcm):
+    import numpy as np
+    x = (np.clip(pcm, -1, 1) * 32767).astype("<i2")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes(x.tobytes())
+
+
+class _SysAudio:
+    """Always-on WASAPI loopback of the default output (what you hear). Never a microphone."""
+    def __init__(self):
+        self.ok = False; self.err = None; self.device = ""
+        self._run = False; self._th = None
+        self._lock = threading.Lock()
+        self._cap = False; self._seg = None
+
+    def start_worker(self):
+        if self._run: return
+        self._run = True
+        self._th = threading.Thread(target=self._loop, daemon=True)
+        self._th.start()
+
+    def stop_worker(self):
+        self._run = False
+
+    def _loop(self):
+        try:
+            import soundcard as sc
+            import numpy as np
+            spk = sc.default_speaker(); self.device = spk.name
+            mic = sc.get_microphone(id=str(spk.name), include_loopback=True)
+            with mic.recorder(samplerate=SR, channels=2, blocksize=SR // 50) as r:
+                self.ok = True; self.err = None
+                while self._run:
+                    d = r.record(numframes=SR // 50)
+                    if d is None or len(d) == 0:
+                        continue
+                    d = np.asarray(d, np.float32)
+                    if d.ndim == 1: d = np.stack([d, d], 1)
+                    now = time.time()
+                    with self._lock:
+                        s = self._seg
+                        if not self._cap or s is None: continue
+                        if s["t0"] is None: s["t0"] = now - len(d) / SR
+                        exp = int((now - s["t0"]) * SR)
+                        gap = exp - (s["n"] + len(d))
+                        if gap > SR // 10:
+                            s["chunks"].append(np.zeros((gap, 2), np.float32)); s["n"] += gap
+                        s["chunks"].append(d[:, :2]); s["n"] += len(d)
+        except Exception as e:
+            self.ok = False; self.err = str(e) or e.__class__.__name__
+
+    def begin(self):
+        with self._lock:
+            self._seg = {"t0": None, "n": 0, "chunks": [], "wall0": time.time()}
+            self._cap = True
+
+    def end(self):
+        import numpy as np
+        with self._lock:
+            self._cap = False; s = self._seg; self._seg = None
+        if s is None: return None
+        a = np.concatenate(s["chunks"], 0) if s["chunks"] else np.zeros((0, 2), np.float32)
+        return {"pcm": a, "t0": s["t0"] if s["t0"] is not None else s["wall0"]}
+
+
 class Recorder:
     def __init__(self, app):
         self.app = app
@@ -53,7 +119,11 @@ class Recorder:
         self.proc = None; self.thread = None; self.path = None; self.error = None
         self.tex = None; self.start_t = 0.0; self.written = 0; self.size = None; self.fmt = None
         self.q = collections.deque(); self.cv = threading.Condition(); self.closing = False
-        self.sys_sound = False          # UI toggle; frame capture is video-only (no mic, no admin)
+        # v1.0.5.5: system / game audio always on (no UI toggle, no microphone)
+        self.sys_sound = True
+        self._audio = _SysAudio()
+        self._audio.start_worker()
+        self._tmp_video = None; self._tmpdir = None; self._audio_seg = None
         self._build_indicator()
 
     def _build_indicator(self):
@@ -96,8 +166,16 @@ class Recorder:
             self.error = "could not capture the game window (%s)" % e; self.tex = None; return False
         self.exe = exe
         self.path = os.path.join(out_dir, "FIREOUT SHINE Recording %s.mp4" % time.strftime("%Y-%m-%d %H-%M-%S"))
+        try:
+            self._tmpdir = tempfile.mkdtemp(prefix="FSRec_")
+            self._tmp_video = os.path.join(self._tmpdir, "video.mp4")
+        except Exception as e:
+            self.error = "temp: %s" % e; self.tex = None; return False
         self.proc = None; self.size = None; self.fmt = None; self.written = 0; self.error = None
         self.q.clear(); self.closing = False
+        self._audio_seg = None
+        try: self._audio.begin()
+        except Exception: pass
         self.start_t = time.time()
         self.active = True
         try: self.ind.show()
@@ -109,9 +187,9 @@ class Recorder:
         cmd = [self.exe, "-hide_banner", "-loglevel", "error", "-y",
                "-f", "rawvideo", "-pix_fmt", pix, "-s", "%dx%d" % (w, h), "-r", str(FPS), "-i", "-",
                "-vf", "vflip,scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-               "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+               "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart",
                "-metadata", "comment=" + BRAND,
-               "-metadata", "title=FIREOUT SHINE Recording", self.path]
+               "-metadata", "title=FIREOUT SHINE Recording", self._tmp_video]
         flags = 0x08000000 if os.name == "nt" else 0
         env = {k: v for k, v in os.environ.items() if not (k.upper().startswith("_PYI") or k.upper().startswith("_MEIPASS"))}
         env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
@@ -213,10 +291,44 @@ class Recorder:
         self._detach()
         return self._finalise(timeout)
 
+    def _mux(self, video, audio_pcm, out):
+        """Mux H.264 video + PCM system audio into a YouTube-ready MP4. Falls back to video-only copy."""
+        flags = 0x08000000 if os.name == "nt" else 0
+        env = {k: v for k, v in os.environ.items() if not (k.upper().startswith("_PYI") or k.upper().startswith("_MEIPASS"))}
+        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+        if audio_pcm is not None and len(audio_pcm.get("pcm", [])) > 0:
+            wav = os.path.join(self._tmpdir or os.path.dirname(out), "audio.wav")
+            try:
+                _write_wav(wav, audio_pcm["pcm"])
+                cmd = [self.exe, "-hide_banner", "-loglevel", "error", "-y",
+                       "-i", video, "-i", wav, "-map", "0:v", "-map", "1:a",
+                       "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), "-ac", "2",
+                       "-shortest", "-movflags", "+faststart",
+                       "-metadata", "comment=" + BRAND,
+                       "-metadata", "title=FIREOUT SHINE Recording", out]
+                r = subprocess.run(cmd, capture_output=True, creationflags=flags, env=env, timeout=120)
+                if r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+                    return True
+            except Exception:
+                pass
+        try:
+            shutil.copy2(video, out)
+            return os.path.exists(out) and os.path.getsize(out) > 0
+        except Exception:
+            return False
+
+    def _cleanup_tmp(self):
+        td = self._tmpdir; self._tmpdir = None; self._tmp_video = None
+        if td:
+            try: shutil.rmtree(td, ignore_errors=True)
+            except Exception: pass
+
     def _finalise(self, timeout=30):
         self.active = False
+        try: self._audio_seg = self._audio.end()
+        except Exception: self._audio_seg = None
         if self.proc is None:
-            return None
+            self._cleanup_tmp(); return None
         with self.cv:
             self.closing = True; self.cv.notify()
         if self.thread: self.thread.join(timeout)
@@ -225,10 +337,17 @@ class Recorder:
             try: self.proc.kill()
             except Exception: pass
             self.error = "encoder timed out"
-        ok = self.proc.returncode == 0 and os.path.exists(self.path) and os.path.getsize(self.path) > 0
-        if not ok and not self.error:
+        ok_v = self.proc.returncode == 0 and self._tmp_video and os.path.exists(self._tmp_video) and os.path.getsize(self._tmp_video) > 0
+        if not ok_v and not self.error:
             try: err = (self.proc.stderr.read() or b"").decode("utf-8", "ignore")[-200:]
             except Exception: err = ""
             self.error = err or "encoder failed"
         self.proc = None
-        return self.path if ok else None
+        out = None
+        if ok_v:
+            if self._mux(self._tmp_video, self._audio_seg, self.path):
+                out = self.path
+            else:
+                self.error = self.error or "mux failed"
+        self._cleanup_tmp()
+        return out

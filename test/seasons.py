@@ -1,4 +1,4 @@
-# v1.0.5.4 QA: seasons + circular speedo + pause-menu EX SCREEN RECORDER 2026
+# v1.0.5.5 QA: seasons + circular speedo + pause-menu EX SCREEN RECORDER 2026 (no system-sound toggle)
 import os, traceback, time as _t
 from panda3d.core import Filename
 from fs_events import SCOL, ICON, BUILTIN
@@ -65,6 +65,8 @@ def run():
         shot("pause_recorder", hud=True)
         print("RESULT pause_has_recorder", "EX SCREEN RECORDER" in str(getattr(app, "_rec_btn", None) is not None),
               "rec", app.screen_rec is not None, flush=True)
+        print("RESULT sys_sound_default", getattr(app.screen_rec, "sys_sound", None), flush=True)
+        assert getattr(app.screen_rec, "sys_sound", False) is True
         from fs_recorder import downloads_dir
         print("RESULT downloads_dir", downloads_dir(), flush=True)
         app.hide_pause()

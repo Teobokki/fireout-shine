@@ -1991,7 +1991,8 @@ class Game:
         self.dist_lbl_jp = U.text(self.mm_root, "", (0, -M - 0.095), 0.03, fg=U.CYAN, font=a.jpfont)
         # circular speedometer (ring gauge around the speed number) + nitro + health
         br = a.a2dBottomRight
-        self.speedo_root = DirectFrame(parent=br, frameColor=(0, 0, 0, 0), pos=(-0.36, 0, 0.52))
+        # v1.0.5.5: sit in the BR corner below the driving-button stack (never overlaps RESET CAR DAMAGE)
+        self.speedo_root = DirectFrame(parent=br, frameColor=(0, 0, 0, 0), pos=(-0.28, 0, 0.26))
         self.speedo_track = self.speedo_root.attach_new_node("speedo-track")
         self.speedo_fill = self.speedo_root.attach_new_node("speedo-fill")
         self.speedo_vmax = 280.0          # ring tops out around typical top speed (km/h)
@@ -2132,7 +2133,9 @@ class Game:
         # right-hand action cluster (context sensitive)
         br = DirectFrame(parent=a.a2dBottomRight, frameColor=(0, 0, 0, 0)); self.btn_nodes.append(br)
         bw = dict(w=0.115, h=0.045, scale=0.028)
-        col1, col2 = -0.42, -0.16; rows = [0.08, 0.2, 0.32, 0.44, 0.56]
+        # on foot: low cluster. driving: lift above the circular speedo (ring top ~0.48) so RESET CAR DAMAGE never overlaps it
+        col1, col2 = -0.42, -0.16
+        rows = [0.58, 0.70, 0.82, 0.94, 1.06] if self.pcar else [0.08, 0.2, 0.32, 0.44, 0.56]
         if self.pcar:
             p, r = self.hold("v_nitro"); U.button(br, "NITRO", (col2, rows[0]), None, hint="Shift", press=p, release=r, edge=U.CYAN, **bw)
             p, r = self.hold("v_hand"); U.button(br, "HANDBRAKE", (col1, rows[0]), None, hint="Space", press=p, release=r, **bw)
