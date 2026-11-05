@@ -1,9 +1,9 @@
 {
-  "version": "1.0.5.4",
-  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.5.4",
-  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.4/FIREOUT-SHINE-Setup-1.0.5.4.exe",
-  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.4/FIREOUT-SHINE-Setup-1.0.5.4.exe",
-  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.4/FIREOUT-SHINE-1.0.5.4-Windows-x64.zip",
-  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.4/FIREOUT-SHINE-Portable.exe",
-  "notes": "Seasonal FESTIVAL with automatic UTC week rotation (Spring sakura \u2192 Summer night races \u2192 Autumn drifts \u2192 Winter run), each with race/photo/drive-to and a countdown. Live GitHub events.json feed with offline cache. Circular speedometer. EX SCREEN RECORDER 2026 on the pause menu (MP4 to Downloads). Full HD cinematic city, Tokyo multi-setback skyscrapers, cel sky only; characters and cars preserved. No bloom. Per-user, no admin."
+  "version": "1.0.5.5",
+  "release_url": "https://github.com/Teobokki/fireout-shine/releases/tag/v1.0.5.5",
+  "url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.5/FIREOUT-SHINE-Setup-1.0.5.5.exe",
+  "installer_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.5/FIREOUT-SHINE-Setup-1.0.5.5.exe",
+  "full_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.5/FIREOUT-SHINE-1.0.5.5-Windows-x64.zip",
+  "portable_url": "https://github.com/Teobokki/fireout-shine/releases/download/v1.0.5.5/FIREOUT-SHINE-Portable.exe",
+  "notes": "EX SCREEN RECORDER 2026: system sound always on (no pause-menu toggle, no mic); circular speedometer cleared from RESET CAR DAMAGE on the driving HUD. Per-user install, no admin. ©2026 EX Inc./HYPERION DIGITAL ©2026"
 }
