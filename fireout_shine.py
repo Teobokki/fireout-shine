@@ -3,7 +3,7 @@
 import os, sys, json, time, math, random, threading, tempfile, urllib.request, shutil, traceback
 
 APP_NAME = "FIREOUT SHINE"
-APP_VERSION = "1.0.5.3"
+APP_VERSION = "1.0.5.4"
 REPO = "Teobokki/fireout-shine"
 UPDATE_URL = "https://raw.githubusercontent.com/%s/main/latest.json" % REPO
 RELEASES_URL = "https://github.com/%s/releases/latest" % REPO
@@ -33,7 +33,7 @@ from panda3d.core import loadPrcFileData, Filename
 _icon = os.path.join(BASE, "assets", "icon.ico")
 loadPrcFileData("", """
 window-title FIREOUT SHINE
-win-size 1280 720
+win-size 1920 1080
 sync-video true
 audio-library-name p3openal_audio
 textures-power-2 none
@@ -115,7 +115,7 @@ def check_update():
 
 
 DEFAULT_SETTINGS = {"traffic": "high", "tod": "cycle", "master": 0.9, "sfx_volume": 0.8, "music_volume": 0.55, "voice_volume": 0.9, "quality": 1, "rain": False,
-                    "buttons": True, "chatter": True, "subtitles": True, "fullscreen": False}
+                    "buttons": True, "chatter": True, "subtitles": True, "fullscreen": False, "force_season": "", "rec_sys_sound": False}
 CREDITS = [
     ("FIREOUT SHINE  /  ファイアアウト・シャイン", None),
     ("Published by", PUBLISHER),
@@ -157,10 +157,10 @@ class App(ShowBase):
         DirectGuiGlobals.setDefaultClickSound(None); DirectGuiGlobals.setDefaultRolloverSound(None)
         DirectGuiGlobals.setDefaultFont(U.FONT_PLAIN) if U.FONT_PLAIN else None
         self.set_background_color(0.01, 0.01, 0.03, 1)
-        self.camLens.set_fov(70); self.camLens.set_near_far(0.25, 1800)     # v1.0.5.3: tighter depth range (24-bit) - no distant z-fighting
+        self.camLens.set_fov(70); self.camLens.set_near_far(0.22, 2200)     # v1.0.5.4: deeper city draw distance
         # shared shader inputs
         self.campos = PTA_LVecBase3f.empty_array(1); self.campos_np = self.campos
-        self.fogcol = Vec3(0.05, 0.03, 0.09); self.fogden = 0.0032
+        self.fogcol = Vec3(0.045, 0.035, 0.08); self.fogden = 0.0026   # v1.0.5.4: longer distance haze
         self.envtex = self.loader.load_texture(Filename.from_os_specific(A("tex", "env.png")))
         img = PNMImage(4, 4, 3); img.fill(0.5, 0.5, 1.0)
         self.flat_nmap = Texture("flatn"); self.flat_nmap.load(img)
@@ -197,6 +197,13 @@ class App(ShowBase):
         self.tex_cover = self.loader.load_texture(Filename.from_os_specific(A("cover.jpg")))
         self.tex_backdrop = self.loader.load_texture(Filename.from_os_specific(A("backdrop.jpg")))
         self.game = None; self.screen = None; self.overlay = None; self.pause_ui = None; self._upd_result = None
+        try:
+            from fs_recorder import Recorder
+            self.screen_rec = Recorder(self)
+            self.screen_rec.sys_sound = bool(self.settings.get("rec_sys_sound", False))
+        except Exception as e:
+            log_error(e); self.screen_rec = None
+        self.accept("f9", self.toggle_recording)
         self.flyover = False; self.fly_t = 0.0
         self.pad = None; self._setup_gamepad()
         self.apply_fullscreen()
@@ -301,7 +308,7 @@ class App(ShowBase):
         if self.settings.get("fullscreen"):
             wp.set_fullscreen(True); wp.set_size(self.pipe.get_display_width(), self.pipe.get_display_height())
         else:
-            ws = os.environ.get("FS_WINSIZE", "1280x720").lower().split("x")
+            ws = os.environ.get("FS_WINSIZE", "1920x1080").lower().split("x")
             try: wp.set_fullscreen(False); wp.set_size(int(ws[0]), int(ws[1]))
             except Exception: wp.set_fullscreen(False); wp.set_size(1280, 720)
         if self.win and hasattr(self.win, "request_properties"):
@@ -311,7 +318,7 @@ class App(ShowBase):
         k = max(0.0, min(1.0, k))
         if self.world is not None: self.world.set_daylight(k, warm)
         self.render.set_shader_input("dayk", k); self.render.set_shader_input("sundir", Vec3(*sun))
-        n = Vec3(0.05, 0.03, 0.09); d = Vec3(0.68, 0.76 - 0.06 * warm, 0.88 - 0.16 * warm)
+        n = Vec3(0.045, 0.035, 0.08); d = Vec3(0.62, 0.74 - 0.06 * warm, 0.90 - 0.14 * warm)
         fc = n * (1 - k) + d * k; self.fog.set_color(fc); self.set_background_color(fc[0], fc[1], fc[2], 1)
         self.fog.set_exp_density(self.fogden * (1 - 0.35 * k))
         dayb = k > 0.5
@@ -394,6 +401,9 @@ class App(ShowBase):
             self.userExit()
 
     def on_exit(self):
+        try:
+            if getattr(self, "screen_rec", None) and self.screen_rec.active: self.screen_rec.stop()
+        except Exception as e: log_error("recorder on exit: %r" % e)
         if self.game:
             try: self.game.save()
             except Exception as e: log_error("save on exit: %r" % e)
@@ -569,6 +579,9 @@ class App(ShowBase):
         self.do_method_later(0.15, go, "start-game")
 
     def quit_to_title(self):
+        try:
+            if getattr(self, "screen_rec", None) and self.screen_rec.active: self.screen_rec.stop()
+        except Exception as e: log_error(e)
         self.hide_pause()
         if self.game:
             self.game.destroy(); self.game = None
@@ -734,24 +747,107 @@ class App(ShowBase):
         if not self.game or self.pause_ui: return
         g = self.game; g.paused = True
         o = self.pause_ui = DirectFrame(parent=self.aspect2d, frameColor=(0, 0, 0, 0.6), frameSize=(-4, 4, -2, 2), state=DGG.NORMAL)
-        U.panel(o, -0.45, 0.45, -0.85, 0.72)
-        U.text(o, "PAUSED", (0, 0.58), 0.08, fg=U.PINK); U.text(o, "一時停止", (0, 0.5), 0.04, fg=U.CYAN, font=self.jpfont)
+        # taller panel so EX SCREEN RECORDER 2026 fits on the same pause menu
+        U.panel(o, -0.48, 0.48, -0.95, 0.78)
+        U.text(o, "PAUSED", (0, 0.66), 0.07, fg=U.PINK); U.text(o, "一時停止", (0, 0.595), 0.034, fg=U.CYAN, font=self.jpfont)
         items = (("RESUME", self.hide_pause), ("ADD MONEY", self.show_add_money), ("CLOTHING", self.show_clothing), ("FOOD", self.show_food), ("SHINE ONLINE", lambda: (self.hide_pause(), g.online.open())), ("MAP", lambda: (self.hide_pause(), g.toggle_map())),
                  ("RESET CAR DAMAGE", lambda: (self.hide_pause(), g.repair_car())),
                  ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls), ("PROFILE", self.show_profile),
                  ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
         m = getattr(g, "match", None)
+        top = 0.50
         if m is not None:                     # v1.0.5.1: during a SHINE SFC 27 match the menu is about the match
             def end():
                 self.hide_pause(); m.end_match()
             items = (("RESUME", self.hide_pause), ("LEAVE MATCH" if m.mode == "view" else "END MATCH", end) if not m.done else ("LEAVE STADIUM", lambda: (self.hide_pause(), m.quit())),
                      ("SETTINGS", lambda: self.open_settings(None)), ("CONTROLS", self.show_controls),
                      ("SAVE & QUIT TO TITLE", self.quit_to_title), ("QUIT GAME", self.userExit))
-            U.text(o, "SHINE SFC 27  %d - %d   %s" % (m.score[0], m.score[1], m.clock_text()), (0, 0.44), 0.035, fg=U.CYAN)
-        for i, (t, c) in enumerate(items):
-            U.button(o, t, (0, (0.33 if m is not None else 0.43) - i * 0.11), c, w=0.33, h=0.046, scale=0.038,
-                     edge=(0.95, 0.35, 0.62, 1) if t == "SHINE ONLINE" else (0.3, 1.0, 0.45, 1) if t == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if t == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if t in ("FOOD", "END MATCH", "LEAVE MATCH") else U.PINK)))
+            U.text(o, "SHINE SFC 27  %d - %d   %s" % (m.score[0], m.score[1], m.clock_text()), (0, 0.545), 0.032, fg=U.CYAN)
+            top = 0.48
+        step = 0.078 if m is None else 0.085
+        for i, (lab, c) in enumerate(items):
+            U.button(o, lab, (0, top - i * step), c, w=0.33, h=0.034, scale=0.032,
+                     edge=(0.95, 0.35, 0.62, 1) if lab == "SHINE ONLINE" else (0.3, 1.0, 0.45, 1) if lab == "ADD MONEY" else ((1.0, 0.55, 0.85, 1) if lab == "CLOTHING" else ((1.0, 0.75, 0.2, 1) if lab in ("FOOD", "END MATCH", "LEAVE MATCH") else U.PINK)))
+        # ---- EX SCREEN RECORDER 2026 (on this pause menu, not a separate screen)
+        y0 = top - len(items) * step - 0.02
+        DirectFrame(parent=o, frameColor=(0.12, 0.04, 0.06, 0.92), frameSize=(-0.40, 0.40, y0 - 0.22, y0 + 0.02), relief=DGG.FLAT)
+        DirectFrame(parent=o, frameColor=(0.95, 0.25, 0.35, 1), frameSize=(-0.40, -0.385, y0 - 0.22, y0 + 0.02), relief=DGG.FLAT)
+        U.text(o, "EX SCREEN RECORDER 2026", (0, y0 - 0.01), 0.030, fg=(1.0, 0.40, 0.45, 1))
+        rec = getattr(self, "screen_rec", None)
+        if rec is None:
+            U.text(o, "Recorder unavailable", (0, y0 - 0.08), 0.024, fg=(1, 0.6, 0.5, 1), font=U.FONT_PLAIN)
+        else:
+            active = rec.active
+            status = ("REC  %s" % self._rec_fmt(rec.elapsed())) if active else "Ready  -  saves MP4 to Downloads"
+            self._rec_status = U.text(o, status, (0, y0 - 0.055), 0.022, fg=(1, 0.35, 0.35, 1) if active else (0.85, 0.85, 0.9, 1), font=U.FONT_PLAIN)
+            def do_rec():
+                if rec.active: self.stop_recording()
+                else: self.start_recording()
+            self._rec_btn = U.button(o, "STOP RECORDING" if active else "START RECORDING", (0, y0 - 0.115), do_rec,
+                                     w=0.30, h=0.032, scale=0.030, edge=(0.95, 0.25, 0.30, 1),
+                                     col=(0.25, 0.06, 0.08, 0.95) if active else (0.14, 0.05, 0.08, 0.95))
+            def tog_sound():
+                rec.sys_sound = not rec.sys_sound
+                self.settings["rec_sys_sound"] = bool(rec.sys_sound); self.save_settings()
+                self.hide_pause(); self.show_pause()
+            U.button(o, "System sound: %s" % ("ON" if rec.sys_sound else "OFF"), (-0.18, y0 - 0.175), tog_sound,
+                     w=0.16, h=0.026, scale=0.024, edge=(0.6, 0.6, 0.7, 1), col=(0.10, 0.08, 0.12, 0.95))
+            U.text(o, "No mic  ·  F9  ·  Downloads", (0.18, y0 - 0.182), 0.018, fg=(0.7, 0.7, 0.75, 1), font=U.FONT_PLAIN)
+            if active:
+                self.task_mgr.add(self._pause_rec_tick, "pause-rec-tick")
         self.accept("escape", self.hide_pause)
+
+    @staticmethod
+    def _rec_fmt(s):
+        s = int(s); return "%02d:%02d" % (s // 60, s % 60) if s < 3600 else "%d:%02d:%02d" % (s // 3600, (s // 60) % 60, s % 60)
+
+    def _pause_rec_tick(self, task):
+        rec = getattr(self, "screen_rec", None)
+        if not self.pause_ui or rec is None or not rec.active:
+            return task.done
+        try:
+            if getattr(self, "_rec_status", None):
+                self._rec_status.setText("REC  %s" % self._rec_fmt(rec.elapsed()))
+        except Exception:
+            return task.done
+        return task.cont
+
+    def start_recording(self):
+        rec = getattr(self, "screen_rec", None)
+        if rec is None: return
+        # resume the world so frames actually advance while recording
+        if self.pause_ui: self.hide_pause()
+        from fs_recorder import downloads_dir
+        if rec.start(downloads_dir()):
+            if self.game: self.game.toast("EX SCREEN RECORDER 2026  -  recording (F9 or pause to stop)")
+        else:
+            if self.game: self.game.toast("Could not start recording: %s" % (rec.error or "error"))
+            else: self._dialog("Could not start recording:\n%s" % (rec.error or "error"), [("OK", self._close_dialog)])
+
+    def stop_recording(self):
+        rec = getattr(self, "screen_rec", None)
+        if rec is None or not rec.active: return
+        if self.game: self.game.toast("Saving recording to Downloads...")
+        was_paused = bool(self.pause_ui)
+        def done(path):
+            if path:
+                msg = "Saved to Downloads: %s" % os.path.basename(path)
+            else:
+                msg = "Recording failed: %s" % (rec.error or "unknown")
+            if self.game: self.game.toast(msg)
+            if was_paused and self.game and not self.pause_ui:
+                self.show_pause()
+            elif self.pause_ui:
+                self.hide_pause(); self.show_pause()
+        if not rec.stop_async(done):
+            if self.game: self.game.toast("Not recording")
+
+    def toggle_recording(self):
+        rec = getattr(self, "screen_rec", None)
+        if rec is None: return
+        if rec.active: self.stop_recording()
+        elif self.game: self.start_recording()
+
 
     def show_food(self):
         """v1.0.4 FOOD: buy something to eat or drink anywhere on foot; picking one closes the menu and plays the animated eat"""
@@ -872,6 +968,8 @@ class App(ShowBase):
         upd()
 
     def hide_pause(self):
+        try: self.task_mgr.remove("pause-rec-tick")
+        except Exception: pass
         if getattr(self, "money_ui", None):
             self.money_ui.destroy(); self.money_ui = None
         if self.pause_ui:
@@ -944,11 +1042,25 @@ class App(ShowBase):
         cyc("Fullscreen", "fullscreen", onoff, -0.35, self.apply_fullscreen)
         cyc("Time of day", "tod", [("cycle", "DAY/NIGHT CYCLE"), ("day", "LOCK DAY"), ("night", "LOCK NIGHT")], -0.45)
         cyc("Traffic density", "traffic", [("low", "LOW"), ("normal", "NORMAL"), ("high", "HIGH")], -0.55)
-        U.text(o, "RTX = full cinematic. EX HD = the same look with tiny savings (lighter reflections, slightly shorter draw distance). Anisotropic filtering applies on restart.", (0, -0.62), 0.024, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.6))
+        # hidden/dev: force_season override. Seasons rotate automatically on the shared UTC week clock; leave this OFF.
+        def after_force():
+            g = getattr(self, "game", None)
+            if g is not None and getattr(g, "events", None) is not None:
+                try: g.events.reapply_from_settings()
+                except Exception: pass
+        if "force_season" not in st: st["force_season"] = ""
+        cyc("Force season (DEV)", "force_season",
+            [("", "OFF (UTC auto)"), ("spring", "SPRING"), ("summer", "SUMMER"), ("autumn", "AUTUMN"), ("winter", "WINTER")],
+            -0.62, after_force)
+        U.text(o, "Seasons rotate on the shared UTC week. Force season is DEV only. RTX and EX HD are both full HD cinematic (no bloom).", (0, -0.70), 0.022, font=U.FONT_PLAIN, fg=(1, 1, 1, 0.55))
         def done():
             self.save_settings(); o.destroy()
+            g = getattr(self, "game", None)
+            if g is not None and getattr(g, "events", None) is not None:
+                try: g.events.reapply_from_settings()
+                except Exception: pass
             if back: back()
-        U.button(o, "DONE", (0, -0.75), done, w=0.2, h=0.05, scale=0.042, edge=U.CYAN)
+        U.button(o, "DONE", (0, -0.80), done, w=0.2, h=0.05, scale=0.042, edge=U.CYAN)
 
     # ---------------------------------------------------------------- dialogs / updates
     def _dialog(self, msg, buttons):

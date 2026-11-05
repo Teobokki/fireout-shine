@@ -1,4 +1,5 @@
-"""GLSL shaders (GLSL 1.20 / compatibility) for glossy car paint and skin/cloth characters."""
+"""GLSL shaders (GLSL 1.20 / compatibility) for glossy car paint, city surfaces and skin/cloth characters.
+v1.0.5.4: richer sun key, contact AO and distance haze on hard surfaces (sheen/characters kept as before). No bloom."""
 from panda3d.core import Shader
 
 VERT = """#version 120
@@ -50,19 +51,27 @@ void main() {
   if (use_tex > 0.5) base *= texture2D(p3d_Texture0, uv);
   base.rgb *= tint.rgb;
   vec3 c = base.rgb;
-  // night lighting: cool moon key + purple/orange hemisphere fill + neon rim
+  // night lighting: cool moon key + purple/orange hemisphere fill
+  // v1.0.5.4 hard surfaces (sheen~0): stronger key/fill contrast + cheap contact AO. Characters (sheen>0) keep the soft wrap look.
   vec3 L = normalize(vec3(0.35, -0.45, 0.82));
   float ndl = max(dot(N, L), 0.0);
   float wrap = max((dot(N, L) + 0.45) / 1.45, 0.0);
-  vec3 hemi = mix(vec3(0.20, 0.12, 0.16), vec3(0.16, 0.16, 0.30), N.z * 0.5 + 0.5);
-  vec3 diff = c * (hemi * 2.3 + vec3(0.62, 0.64, 0.80) * mix(ndl, wrap, sheen) * 1.15 + vec3(0.10, 0.09, 0.10));
-  // street-light pools: warm light from above
-  diff += c * vec3(0.9, 0.6, 0.35) * 0.25 * max(N.z, 0.0);
-  // daylight: warm sun key + blue sky / warm ground bounce
+  float hard = 1.0 - clamp(sheen, 0.0, 1.0);          // 1 = cars/city, 0 = skin/cloth
+  vec3 hemi = mix(vec3(0.16, 0.10, 0.14), vec3(0.14, 0.15, 0.28), N.z * 0.5 + 0.5);
+  float key = mix(ndl, wrap, sheen);
+  // contact AO: darken downward-facing / crevice normals a touch on hard surfaces only
+  float ao = mix(1.0, 0.55 + 0.45 * max(N.z, 0.0), hard * 0.85);
+  vec3 diff = c * (hemi * mix(2.3, 1.55, hard) + vec3(0.62, 0.64, 0.80) * key * mix(1.15, 1.45, hard) + vec3(0.08, 0.07, 0.09)) * ao;
+  // street-light pools: warm light from above (roads/buildings)
+  diff += c * vec3(0.95, 0.62, 0.32) * mix(0.25, 0.38, hard) * max(N.z, 0.0);
+  // daylight: warm sun key + blue sky / warm ground bounce, harder shadows on city surfaces
   vec3 Ls = normalize(sundir);
   float sdl = max(dot(N, Ls), 0.0); float swr = max((dot(N, Ls) + 0.45) / 1.45, 0.0);
-  vec3 dhemi = mix(vec3(0.42, 0.38, 0.34), vec3(0.55, 0.66, 0.85), N.z * 0.5 + 0.5);
-  vec3 ddiff = c * (dhemi * 1.0 + vec3(1.15, 1.05, 0.92) * mix(sdl, swr, sheen) * 1.0);   // v1.0.4: no over-exposure
+  float dkey = mix(sdl, swr, sheen);
+  // sharper sun terminator on hard surfaces (still no real shadow map / no bloom)
+  dkey = mix(dkey, pow(sdl, 1.35), hard * 0.7);
+  vec3 dhemi = mix(vec3(0.38, 0.34, 0.30), vec3(0.52, 0.64, 0.88), N.z * 0.5 + 0.5);
+  vec3 ddiff = c * (dhemi * mix(1.0, 0.78, hard) + vec3(1.20, 1.08, 0.90) * dkey * mix(1.0, 1.25, hard)) * ao;
   diff = mix(diff, ddiff, dayk); L = normalize(mix(L, Ls, dayk));
   vec3 R = reflect(-V, N);
   vec2 euv = vec2(atan(R.y, R.x) / 6.2831 + 0.5, clamp(0.5 - asin(clamp(R.z, -1.0, 1.0)) / 3.1416, 0.01, 0.99));
@@ -81,14 +90,18 @@ void main() {
   // v1.0.5.3 clearcoat (car paint): extra sharp lobe + fresnel-weighted mirror reflection on top of the metallic base
   float cfr = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
   col = mix(col, col * (1.0 - cfr * 0.5) + env * cfr * 1.1, clearcoat);
-  col += vec3(1.0, 0.98, 0.95) * pow(max(dot(N, H), 0.0), 420.0) * clearcoat * 1.4;
+  col += vec3(1.0, 0.98, 0.95) * pow(max(dot(N, H), 0.0), 480.0) * clearcoat * 1.55;
   // (v1.0.4: the pink skin/cloth rim light was removed - it made legs and arms look like they were glowing)
   col += p3d_Material.emission.rgb * emitboost;
   col *= p3d_ColorScale.rgb;
   col = min(col, vec3(0.82) + 0.18 * (1.0 - exp(-(max(col - vec3(0.82), vec3(0.0))) * 4.0)));   // soft highlight roll-off instead of clipping to white
-  float f = 1.0 - exp(-fogden * fogden * vdist * vdist);
-  f *= mix(1.0, 0.55, clamp(wpos.z / 90.0, 0.0, 1.0));      // v1.0.5.3: height haze gradient (denser near the street)
-  col = mix(col, mix(fogcol, fogday, dayk), clamp(f, 0.0, 1.0));
+  // v1.0.5.4: longer atmospheric haze so distant city blocks read as layered depth (still flat fog, no bloom)
+  float f = 1.0 - exp(-fogden * fogden * vdist * vdist * mix(1.0, 1.35, hard));
+  f *= mix(1.0, 0.50, clamp(wpos.z / 90.0, 0.0, 1.0));
+  vec3 fogc = mix(fogcol, fogday, dayk);
+  // slight desat into the distance on hard surfaces
+  col = mix(col, mix(vec3(dot(col, vec3(0.3, 0.55, 0.15))), col, 0.55), clamp(f, 0.0, 1.0) * hard * 0.35);
+  col = mix(col, fogc, clamp(f, 0.0, 1.0));
   gl_FragColor = vec4(col, base.a * p3d_ColorScale.a);
 }
 """
@@ -117,3 +130,63 @@ def apply(np_, app, gloss=0.6, tex=False, nmap=None, sheen=0.0, emitboost=1.0, t
     np_.set_shader_input("tint", tint)
     np_.set_shader_input("wspos_view", (0, 0, 0))
     np_.set_shader_input("clearcoat", clearcoat)
+
+
+# ---------------------------------------------------------------- sky only (cel). Never applied to characters or cars.
+SKY_VERT = """#version 120
+uniform mat4 p3d_ModelViewProjectionMatrix;
+attribute vec4 p3d_Vertex; attribute vec2 p3d_MultiTexCoord0;
+varying vec2 uv; varying float elev;
+void main() {
+  gl_Position = p3d_ModelViewProjectionMatrix * p3d_Vertex;
+  uv = p3d_MultiTexCoord0;
+  elev = p3d_MultiTexCoord0.y;   // dome UV: ~0 horizon .. ~1 zenith
+}
+"""
+SKY_FRAG = """#version 120
+uniform sampler2D p3d_Texture0;
+uniform vec4 p3d_ColorScale;
+uniform float dayk;
+varying vec2 uv; varying float elev;
+void main() {
+  vec3 tex = texture2D(p3d_Texture0, uv).rgb;
+  // cel bands by elevation: flat cinematic sky slices (sky dome only)
+  float e = clamp(elev * 2.0 - 0.15, 0.0, 1.0);
+  // night palette
+  vec3 n0 = vec3(0.02, 0.02, 0.06);   // zenith
+  vec3 n1 = vec3(0.08, 0.04, 0.18);   // mid
+  vec3 n2 = vec3(0.35, 0.12, 0.32);   // horizon neon wash
+  // day palette
+  vec3 d0 = vec3(0.25, 0.48, 0.92);
+  vec3 d1 = vec3(0.45, 0.70, 0.95);
+  vec3 d2 = vec3(0.78, 0.88, 0.98);
+  vec3 night, dayc;
+  if (e > 0.66) { night = n0; dayc = d0; }
+  else if (e > 0.33) { night = n1; dayc = d1; }
+  else { night = n2; dayc = d2; }
+  // soft mix with the photo sky so stars/moon/clouds still read, then re-quantize
+  vec3 base = mix(night, dayc, clamp(dayk, 0.0, 1.0));
+  vec3 mixc = mix(base, tex, 0.35);
+  float l = dot(mixc, vec3(0.30, 0.59, 0.11));
+  float ql = floor(l * 5.0 + 0.5) / 5.0;
+  vec3 cel = mixc * (ql / max(l, 1e-3));
+  // hard horizon band edge
+  float edge = smoothstep(0.28, 0.32, e) * (1.0 - smoothstep(0.34, 0.38, e));
+  cel = mix(cel, cel * 1.08 + vec3(0.04, 0.02, 0.06), edge * (1.0 - dayk));
+  cel *= p3d_ColorScale.rgb;
+  gl_FragColor = vec4(clamp(cel, 0.0, 1.0), p3d_ColorScale.a);
+}
+"""
+
+
+def sky_shader():
+    if "sky" not in _cache:
+        _cache["sky"] = Shader.make(Shader.SL_GLSL, SKY_VERT, SKY_FRAG)
+    return _cache["sky"]
+
+
+def apply_sky(np_, dayk=0.0):
+    """Cel-shade a sky dome only. Do not call for characters, cars, or city props."""
+    np_.set_shader(sky_shader())
+    np_.set_shader_input("dayk", float(dayk))
+

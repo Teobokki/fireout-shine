@@ -1,8 +1,8 @@
-"""Dense Tokyo-style facade textures: 1024px tile = 32 m wide x 28 m tall (8 floors of 3.5 m).
+"""Dense Tokyo-style facade textures: 2048px HD tile = 32 m wide x 28 m tall (8 floors of 3.5 m).
 Thin window grids, mostly dark glass, ~30% warm/cool lit windows, floor bands, mullions. Six building styles."""
 import numpy as np, os
 from PIL import Image, ImageDraw, ImageFilter
-T = "assets/tex"; W = 1024; PX = W / 32.0          # px per metre
+T = "assets/tex"; W = 2048; PX = W / 32.0  # v1.0.5.4 HD          # px per metre
 DAY = False
 def lit_col(r, warm):
     k = r.uniform(0.6, 1.0)

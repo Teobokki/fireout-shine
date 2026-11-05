@@ -100,25 +100,30 @@ def facade(seed, base, lit_p, warm):
     return im
 for i, (base, lp, wm) in enumerate([((28, 30, 40), 0.42, 0.7), ((36, 30, 36), 0.30, 0.4), ((22, 28, 34), 0.55, 0.3), ((40, 38, 44), 0.22, 0.8)]):
     facade(10 + i, base, lp, wm).save(os.path.join(T, "facade%d.png" % i))
-# shop-front ground floor strip (lit shop windows / shutters), 512x128
-im = Image.new("RGB", (512, 128), (20, 18, 26)); d = ImageDraw.Draw(im)
+# shop-front ground floor strip (lit shop windows / shutters), HD 2048x256
+im = Image.new("RGB", (2048, 256), (20, 18, 26)); d = ImageDraw.Draw(im)
 for k in range(4):
-    x0 = k * 128 + 8; c = D.NEON[k * 2 % len(D.NEON)]
-    d.rectangle((x0, 30, x0 + 112, 124), fill=(int(230 * 0.9), int(215 * 0.9), int(190 * 0.9)) if k % 2 == 0 else (60, 62, 70))
-    d.rectangle((x0, 8, x0 + 112, 26), fill=tuple(int(v * 255) for v in c))
+    x0 = k * 512 + 16; c = D.NEON[k * 2 % len(D.NEON)]
+    d.rectangle((x0, 60, x0 + 448, 248), fill=(int(230 * 0.9), int(215 * 0.9), int(190 * 0.9)) if k % 2 == 0 else (60, 62, 70))
+    d.rectangle((x0, 16, x0 + 448, 52), fill=tuple(int(v * 255) for v in c))
 im.save(os.path.join(T, "shopfront.png"))
 
-# ---------------- road / sidewalk
-n = rng.normal(0, 1, (512, 512)); n = np.array(Image.fromarray(((n * 20) + 128).clip(0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.8)), float)
-puddle = np.array(Image.fromarray((rng.random((64, 64)) * 255).astype(np.uint8)).resize((512, 512), Image.BICUBIC).filter(ImageFilter.GaussianBlur(10)), float) / 255
-v = 30 + (n - 128) * 0.35
-rgb = np.stack([v * 0.95, v * 0.95, v * 1.08], 2)
-alpha = 215 - 85 * np.clip((puddle - 0.45) * 4, 0, 1)        # puddles more transparent -> stronger reflection
+# ---------------- road / sidewalk (v1.0.5.4 HD 2048)
+ASZ = 2048
+n = rng.normal(0, 1, (ASZ, ASZ)); n = np.array(Image.fromarray(((n * 20) + 128).clip(0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(1.2)), float)
+puddle = np.array(Image.fromarray((rng.random((128, 128)) * 255).astype(np.uint8)).resize((ASZ, ASZ), Image.BICUBIC).filter(ImageFilter.GaussianBlur(18)), float) / 255
+grain = np.array(Image.fromarray((rng.random((ASZ, ASZ)) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.4)), float)
+v = 28 + (n - 128) * 0.40 + (grain - 128) * 0.08
+rgb = np.stack([v * 0.92, v * 0.94, v * 1.05], 2)
+alpha = 220 - 90 * np.clip((puddle - 0.45) * 4, 0, 1)
 Image.fromarray(np.dstack([rgb.clip(0, 255), alpha]).astype(np.uint8), "RGBA").save(os.path.join(T, "asphalt.png"))
-sw = Image.new("RGB", (256, 256), (58, 56, 62)); d = ImageDraw.Draw(sw)
-for k in range(0, 256, 64):
-    d.line((k, 0, k, 256), fill=(38, 36, 42), width=3); d.line((0, k, 256, k), fill=(38, 36, 42), width=3)
-sw.filter(ImageFilter.GaussianBlur(0.6)).save(os.path.join(T, "sidewalk.png"))
+sw = Image.new("RGB", (ASZ, ASZ), (62, 60, 66)); d = ImageDraw.Draw(sw)
+for k in range(0, ASZ, 128):
+    d.line((k, 0, k, ASZ), fill=(40, 38, 44), width=5); d.line((0, k, ASZ, k), fill=(40, 38, 44), width=5)
+# fine aggregate noise
+noise = Image.fromarray((rng.integers(0, 40, (ASZ, ASZ))).astype(np.uint8)).convert("L")
+sw = Image.blend(sw, Image.merge("RGB", (noise, noise, noise)), 0.12)
+sw.filter(ImageFilter.GaussianBlur(0.8)).save(os.path.join(T, "sidewalk.png"))
 
 # ---------------- night sky (equirect 2048x1024, upper half used)
 H, W = 1024, 2048
@@ -140,8 +145,8 @@ m = m.filter(ImageFilter.GaussianBlur(0.5)); sky = np.array(m, float)
 sky[H // 2:] = hor
 Image.fromarray(sky.clip(0, 255).astype(np.uint8)).save(os.path.join(T, "sky.jpg"), quality=90)
 
-# ---------------- environment map for glossy car paint (equirect 512x256)
-E = np.zeros((256, 512, 3)); ey = np.linspace(0, 1, 256)[:, None, None]
+# ---------------- environment map for glossy car paint (equirect HD 1024x512)
+E = np.zeros((512, 1024, 3)); ey = np.linspace(0, 1, 512)[:, None, None]
 E += np.where(ey < 0.5, 8 + 50 * (ey / 0.5) ** 3, 6) * np.array([0.5, 0.4, 1.0])
 for _ in range(90):
     x, y = rng.integers(0, 512), rng.integers(70, 140); c = np.array(D.NEON[rng.integers(0, len(D.NEON))]) * rng.uniform(120, 255)

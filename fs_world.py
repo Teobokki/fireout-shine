@@ -344,7 +344,7 @@ class World:
         nx = rng.choice([1, 2, 2, 3]); ny = rng.choice([1, 2, 2, 3])
         if dist == "kurogane": nx, ny = rng.choice([1, 2]), rng.choice([1, 2])
         lw = (bx1 - bx0) / nx; lh = (by1 - by0) / ny
-        hr = {"crossing": (55, 150), "akari": (25, 90), "kurogane": (10, 28), "tower": (35, 120), "sakura": (10, 34)}[dist]
+        hr = {"crossing": (65, 190), "akari": (28, 110), "kurogane": (10, 28), "tower": (45, 160), "sakura": (10, 36)}[dist]  # v1.0.5.4 taller Tokyo core
         for a in range(nx):
             for b in range(ny):
                 lx0, ly0 = bx0 + a * lw + 0.6, by0 + b * lh + 0.6
@@ -359,12 +359,13 @@ class World:
 
     def building(self, x0, y0, x1, y1, h, dist, ch, edge, bx):
         rng = self.rng
-        if h > 70: fac = rng.choice(["facade0", "facade4", "facade0", "facade3"])
-        elif h > 30: fac = rng.choice(["facade1", "facade2", "facade3", "facade4"])
+        # Tokyo facade mix: dark curtain glass, pale tile offices, teal glass — Japanese metro, not western CBD
+        if h > 70: fac = rng.choice(["facade0", "facade6", "facade4", "facade0", "facade6", "facade3"])
+        elif h > 30: fac = rng.choice(["facade1", "facade2", "facade3", "facade4", "facade0"])
         else: fac = rng.choice(["facade5", "facade2", "facade1", "facade5"])
-        if dist == "kurogane": fac = rng.choice(["facade1", "facade3"])
-        if h > 60 and dist in ("crossing", "tower", "akari") and rng.random() < 0.55:
-            fac = "facade6"; h *= rng.uniform(1.15, 1.45)        # slim modern glass tower
+        if dist == "kurogane": fac = rng.choice(["facade1", "facade3", "facade5"])
+        if h > 55 and dist in ("crossing", "tower", "akari") and rng.random() < 0.65:
+            fac = "facade6"; h *= rng.uniform(1.20, 1.55)        # slim Tokyo glass tower
         tint = rng.choice([(1, 1, 1), (0.92, 0.96, 1.08), (1.06, 0.98, 0.92), (0.88, 0.88, 0.95)])
         col = (tint[0], tint[1], tint[2], 1)
         mb = self.M(fac, ch)
@@ -395,16 +396,25 @@ class World:
                 self.M("flat", ch).box(fx - 0.12, fy - 0.12, h, fx + 0.12, fy + 0.12, h + 13, (0.75, 0.75, 0.78, 1))
                 self.flag_poles.append((fx, fy, h + 12.8, rng.uniform(0, 6.28)))
                 self.flag_spots.append((fx, fy, h + 10))
+        # v1.0.5.4 HD: floor ledge bands + roof parapet (higher geometric detail, still original procedural)
+        flat = self.M("flat", ch)
+        fh = 3.5; z = 4.0
+        while z < h - 1.5:
+            lip = 0.12
+            flat.box(x0 - lip, y0 - lip, z, x1 + lip, y1 + lip, z + 0.18, (col[0] * 0.55, col[1] * 0.55, col[2] * 0.55, 1))
+            z += fh
+        # roof parapet lip
+        pw = 0.35
+        flat.box(x0 - 0.05, y0 - 0.05, h, x1 + 0.05, y0 + pw, h + 1.1, (0.08, 0.08, 0.1, 1))
+        flat.box(x0 - 0.05, y1 - pw, h, x1 + 0.05, y1 + 0.05, h + 1.1, (0.08, 0.08, 0.1, 1))
+        flat.box(x0 - 0.05, y0, h, x0 + pw, y1, h + 1.1, (0.08, 0.08, 0.1, 1))
+        flat.box(x1 - pw, y0, h, x1 + 0.05, y1, h + 1.1, (0.08, 0.08, 0.1, 1))
         # roof cap + rooftop details
-        self.M("flat", ch).quad((x0, y0, h), (x1, y0, h), (x1, y1, h), (x0, y1, h), (0.05, 0.05, 0.07, 1), n=(0, 0, 1))
+        flat.quad((x0, y0, h), (x1, y0, h), (x1, y1, h), (x0, y1, h), (0.05, 0.05, 0.07, 1), n=(0, 0, 1))
         self.roof_details(x0, y0, x1, y1, h, ch, fac)
-        if h > 45 and rng.random() < 0.6 and min(x1 - x0, y1 - y0) > 14:     # setback crown / stepped tower
-            ix, iy = (x1 - x0) * rng.uniform(0.15, 0.25), (y1 - y0) * rng.uniform(0.15, 0.25)
-            h2 = h + rng.uniform(10, 35)
-            mb.box(x0 + ix, y0 + iy, h, x1 - ix, y1 - iy, h2, col, top=False,
-                   uvs=lambda f, w, hh: ((0, h / 28.0), (w / 32.0, h / 28.0), (w / 32.0, h2 / 28.0), (0, h2 / 28.0)))
-            self.M("flat", ch).quad((x0 + ix, y0 + iy, h2), (x1 - ix, y0 + iy, h2), (x1 - ix, y1 - iy, h2), (x0 + ix, y1 - iy, h2), (0.05, 0.05, 0.07, 1), n=(0, 0, 1))
-            self.roof_details(x0 + ix, y0 + iy, x1 - ix, y1 - iy, h2, ch, fac)
+        # v1.0.5.4: Tokyo-style multi-setback crown (Japanese office tower massing, not a western glass box)
+        if h > 40 and min(x1 - x0, y1 - y0) > 12:
+            self.tokyo_tower_crown(mb, x0, y0, x1, y1, h, col, ch, fac, dist)
         # street level: awnings + paper lanterns on street-facing fronts
         if dist in ("akari", "crossing", "sakura", "tower"):
             aw = self.M("flat", ch); e = self.M("emit", ch)
@@ -455,7 +465,7 @@ class World:
     def roof_details(self, x0, y0, x1, y1, h, ch, fac):
         """AC units, water tanks, antennas, helipads and red aviation lights."""
         rng = self.rng; mb = self.M("flat", ch); w, d = x1 - x0, y1 - y0
-        for _ in range(rng.randint(2, 6)):           # AC units
+        for _ in range(rng.randint(4, 9)):           # v1.0.5.4 HD: more rooftop AC units
             ax, ay = rng.uniform(x0 + 1.5, x1 - 3), rng.uniform(y0 + 1.5, y1 - 3)
             mb.box(ax, ay, h, ax + 1.6, ay + 1.0, h + 1.1, (0.32, 0.33, 0.36, 1))
         if rng.random() < 0.5:                        # water tank on legs
@@ -1015,26 +1025,81 @@ class World:
         self.home_win = wm.node(); self.home_win.reparent_to(self.home_int); self.home_win.set_texture(self.T("facade0.png"), 1)
         self.home_win.set_two_sided(True); self.home_int.hide()
 
-    def build_skyline(self):
-        """distant (non-collidable) skyline around the playable area."""
+    def tokyo_tower_crown(self, mb, x0, y0, x1, y1, h, col, ch, fac, dist):
+        """Real-life Tokyo office / tower massing: stepped setbacks, machine floor band, needle antenna.
+        Japanese skyline vocabulary only (not a generic western glass slab)."""
         rng = self.rng
-        for k in range(160):
+        flat = self.M("flat", ch)
+        # 2–3 setback tiers (Tokyo Building Standard Law style stepping)
+        tiers = 2 if h < 70 else 3
+        cx0, cy0, cx1, cy1, ch_ = x0, y0, x1, y1, h
+        for ti in range(tiers):
+            inset = min(cx1 - cx0, cy1 - cy0) * rng.uniform(0.10, 0.18)
+            if inset < 1.2: break
+            nh = ch_ + rng.uniform(8, 22 if ti == 0 else 28)
+            # mechanical floor band (dark louver strip) — very common on Tokyo towers
+            flat.box(cx0 - 0.08, cy0 - 0.08, ch_, cx1 + 0.08, cy1 + 0.08, ch_ + 1.4,
+                     (0.12, 0.13, 0.15, 1) if ti == 0 else (0.18, 0.18, 0.22, 1))
+            mb.box(cx0 + inset, cy0 + inset, ch_ + 1.4, cx1 - inset, cy1 - inset, nh, col, top=False,
+                   uvs=lambda f, w, hh, z0=ch_, z1=nh: ((0, z0 / 28.0), (w / 32.0, z0 / 28.0), (w / 32.0, z1 / 28.0), (0, z1 / 28.0)))
+            flat.quad((cx0 + inset, cy0 + inset, nh), (cx1 - inset, cy0 + inset, nh),
+                      (cx1 - inset, cy1 - inset, nh), (cx0 + inset, cy1 - inset, nh), (0.05, 0.05, 0.07, 1), n=(0, 0, 1))
+            self.roof_details(cx0 + inset, cy0 + inset, cx1 - inset, cy1 - inset, nh, ch, fac)
+            cx0 += inset; cy0 += inset; cx1 -= inset; cy1 -= inset; ch_ = nh
+        # needle / spire crown (Tokyo Metropolitan / Nishi-Shinjuku vocabulary)
+        if h > 55 and rng.random() < 0.75:
+            ax = (cx0 + cx1) / 2; ay = (cy0 + cy1) / 2
+            ah = rng.uniform(12, 28)
+            flat.box(ax - 0.55, ay - 0.55, ch_, ax + 0.55, ay + 0.55, ch_ + 3.0, (0.55, 0.55, 0.58, 1))
+            flat.box(ax - 0.18, ay - 0.18, ch_ + 3.0, ax + 0.18, ay + 0.18, ch_ + ah, (0.65, 0.65, 0.7, 1))
+            # aviation light
+            self.glow(ax, ay, ch_ + ah + 0.3, 2.5, (1.0, 0.1, 0.06)); self.aviation.append((ax, ay, ch_ + ah + 0.3))
+        # corner vertical LED shaft on street towers (Shinjuku / Shibuya neon edge, original)
+        if dist in ("crossing", "tower", "akari") and h > 50 and rng.random() < 0.55:
+            e = self.M("emit", ch); nc = rng.choice(D.NEON)
+            face = rng.choice([f for f, on in zip("wsen", (True, True, True, True))])
+            for zz0 in (4.0,):
+                if face == "w": e.box(x0 - 0.25, y0 + 1.0, zz0, x0 - 0.05, y0 + 1.35, h - 2, (nc[0] * 2, nc[1] * 2, nc[2] * 2, 1))
+                elif face == "e": e.box(x1 + 0.05, y0 + 1.0, zz0, x1 + 0.25, y0 + 1.35, h - 2, (nc[0] * 2, nc[1] * 2, nc[2] * 2, 1))
+                elif face == "s": e.box(x0 + 1.0, y0 - 0.25, zz0, x0 + 1.35, y0 - 0.05, h - 2, (nc[0] * 2, nc[1] * 2, nc[2] * 2, 1))
+                else: e.box(x0 + 1.0, y1 + 0.05, zz0, x0 + 1.35, y1 + 0.25, h - 2, (nc[0] * 2, nc[1] * 2, nc[2] * 2, 1))
+
+    def build_skyline(self):
+        """distant Tokyo-style skyline (Japanese towers: slim glass needles, tile offices, setbacks, spires)."""
+        rng = self.rng
+        for k in range(220):   # denser rim — reads as a real metro skyline
             a = rng.uniform(0, 2 * math.pi)
             if -0.7 < math.cos(a) and math.cos(a) > 0.55 and abs(math.sin(a)) < 0.8:
                 continue     # leave the sea view open to the east
-            r = rng.uniform(620, 900)
+            r = rng.uniform(600, 980)
             x, y = math.cos(a) * r, math.sin(a) * r
             if x > 380: continue
-            glass = rng.random() < 0.6
-            w = rng.uniform(16, 34) if glass else rng.uniform(25, 60); h = rng.uniform(140, 340) if glass else rng.uniform(60, 200)
-            fac = "facade6" if glass else "facade%d" % rng.randrange(4)
+            # Tokyo mix: slim glass (~45%), white/tile office (~35%), dark mid (~20%)
+            kind = rng.random()
             UV = lambda f, ww, hh: ((0, 0), (ww / 32.0, 0), (ww / 32.0, hh / 28.0), (0, hh / 28.0))
-            hb = h * rng.uniform(0.6, 0.8) if glass else h
-            self.M(fac, (8, 8)).box(x - w / 2, y - w / 2, 0, x + w / 2, y + w / 2, hb, (0.7, 0.7, 0.85, 1) if not glass else (1, 1, 1, 1), top=False, uvs=UV)
-            if glass:     # setback upper section + crown
-                w2 = w * rng.uniform(0.6, 0.8)
-                self.M(fac, (8, 8)).box(x - w2 / 2, y - w2 / 2, hb, x + w2 / 2, y + w2 / 2, h, (1, 1, 1, 1), top=False, uvs=UV)
-                self.M("flat", (8, 8)).box(x - w / 2, y - w / 2, hb - 0.5, x + w / 2, y + w / 2, hb + 0.6, (0.75, 0.78, 0.82, 1))
+            if kind < 0.45:          # slim curtain-wall needle (Shinjuku / Shiodome feel, original)
+                w = rng.uniform(14, 26); h = rng.uniform(160, 380); fac = "facade6"
+                hb = h * rng.uniform(0.55, 0.72)
+                self.M(fac, (8, 8)).box(x - w / 2, y - w / 2, 0, x + w / 2, y + w / 2, hb, (1, 1, 1, 1), top=False, uvs=UV)
+                w2 = w * rng.uniform(0.55, 0.75)
+                self.M(fac, (8, 8)).box(x - w2 / 2, y - w2 / 2, hb, x + w2 / 2, y + w2 / 2, h * 0.92, (1, 1, 1, 1), top=False, uvs=UV)
+                # mechanical band + spire
+                self.M("flat", (8, 8)).box(x - w / 2, y - w / 2, hb - 0.4, x + w / 2, y + w / 2, hb + 0.8, (0.2, 0.22, 0.25, 1))
+                w3 = w2 * 0.45
+                self.M(fac, (8, 8)).box(x - w3 / 2, y - w3 / 2, h * 0.92, x + w3 / 2, y + w3 / 2, h, (1, 1, 1, 1), top=False, uvs=UV)
+                self.M("flat", (8, 8)).box(x - 0.25, y - 0.25, h, x + 0.25, y + 0.25, h + rng.uniform(10, 22), (0.6, 0.6, 0.65, 1))
+            elif kind < 0.80:        # stepped white/tile Tokyo office
+                w = rng.uniform(22, 48); h = rng.uniform(90, 240); fac = "facade%d" % rng.choice([0, 1, 2, 3])
+                hb = h * rng.uniform(0.65, 0.8)
+                tint = (0.85, 0.86, 0.90, 1)
+                self.M(fac, (8, 8)).box(x - w / 2, y - w / 2, 0, x + w / 2, y + w / 2, hb, tint, top=False, uvs=UV)
+                w2 = w * rng.uniform(0.65, 0.82)
+                self.M(fac, (8, 8)).box(x - w2 / 2, y - w2 / 2, hb, x + w2 / 2, y + w2 / 2, h, tint, top=False, uvs=UV)
+                self.M("flat", (8, 8)).box(x - w / 2, y - w / 2, hb - 0.5, x + w / 2, y + w / 2, hb + 0.6, (0.55, 0.56, 0.6, 1))
+            else:                    # darker mid-rise slab with rooftop gear
+                w = rng.uniform(28, 55); h = rng.uniform(55, 140); fac = "facade%d" % rng.choice([1, 3, 4])
+                self.M(fac, (8, 8)).box(x - w / 2, y - w / 2, 0, x + w / 2, y + w / 2, h, (0.65, 0.66, 0.72, 1), top=False, uvs=UV)
+                self.M("flat", (8, 8)).box(x - 2, y - 2, h, x + 2, y + 2, h + rng.uniform(4, 10), (0.3, 0.3, 0.32, 1))
                 self.M("flat", (8, 8)).box(x - w2 / 2 - 0.4, y - w2 / 2 - 0.4, h, x + w2 / 2 + 0.4, y + w2 / 2 + 0.4, h + 6, (0.8, 0.83, 0.88, 1))
                 if rng.random() < 0.5: self.M("flat", (8, 8)).box(x - 0.5, y - 0.5, h + 6, x + 0.5, y + 0.5, h + 26, (0.7, 0.7, 0.75, 1))
             if rng.random() < 0.4:
@@ -1048,7 +1113,6 @@ class World:
                   "facade2": "facade2.png", "facade3": "facade3.png", "facade4": "facade4.png", "facade5": "facade5.png", "facade6": "facade6.png", "shopfront": "shopfront.png", "signs": "signs.png", "flag": "flag.jpg"}
         self.fac_nodes = []; self.emit_nodes = []; self.ground_np = None; self.shop_nps = []
         self.static = self.root.attach_new_node("static")
-        self.static.set_light_off()
         ground = self.root.attach_new_node("ground")
         for (ch, mat), mb in self.mb.items():
             if not len(mb):
@@ -1059,11 +1123,15 @@ class World:
             if mat == "asphalt":
                 np_.reparent_to(ground); np_.set_transparency(TransparencyAttrib.M_alpha); np_.set_bin("transparent", 1)
                 np_.set_depth_write(True)
+                # v1.0.5.4: richer dark asphalt (wet-road look under the city lights), no glow
+                np_.set_color_scale(0.72, 0.74, 0.78, 1)
             elif mat == "marking":
-                np_.reparent_to(ground); np_.set_color_scale(0.75, 0.75, 0.78, 1); np_.set_bin("transparent", 2)
-                np_.set_transparency(TransparencyAttrib.M_alpha); np_.set_alpha_scale(0.8); np_.set_depth_offset(1)
+                np_.reparent_to(ground); np_.set_color_scale(0.95, 0.95, 0.92, 1); np_.set_bin("transparent", 2)
+                np_.set_transparency(TransparencyAttrib.M_alpha); np_.set_alpha_scale(0.92); np_.set_depth_offset(1)
             elif mat in ("sidewalk", "kerb", "sand", "wood", "ground"):
                 np_.reparent_to(ground)
+                if mat == "sidewalk": np_.set_color_scale(0.88, 0.86, 0.82, 1)   # warmer concrete vs dark asphalt
+                elif mat == "kerb": np_.set_color_scale(0.78, 0.76, 0.72, 1)
             else:
                 np_.reparent_to(self.static)
             if mat in ("signs", "emit", "flag"):
@@ -1073,6 +1141,21 @@ class World:
             if mat == "shopfront": self.shop_nps.append(np_)
             if mat == "flag":
                 np_.set_texture(self.T("flag.jpg", repeat=False))
+            # v1.0.5.4 HD: cinematic material pipeline on city surfaces (not characters)
+            try:
+                import fs_shaders
+                if mat.startswith("facade"):
+                    gloss = 0.55 if mat == "facade6" else 0.32
+                    cc = 0.35 if mat == "facade6" else 0.05
+                    fs_shaders.apply(np_, self.app, gloss=gloss, tex=True, sheen=0.0, clearcoat=cc)
+                elif mat == "shopfront":
+                    fs_shaders.apply(np_, self.app, gloss=0.45, tex=True, sheen=0.0, clearcoat=0.1)
+                elif mat in ("sidewalk", "kerb", "ground", "wood"):
+                    fs_shaders.apply(np_, self.app, gloss=0.18, tex=mat in texmap, sheen=0.0)
+                elif mat == "asphalt":
+                    fs_shaders.apply(np_, self.app, gloss=0.55, tex=True, sheen=0.0, clearcoat=0.2)
+            except Exception:
+                pass
         # reflections (mirrored world under the translucent asphalt)
         self.refl = self.root.attach_new_node("reflections")
         for mat, mb in self.mirror.items():
@@ -1083,8 +1166,8 @@ class World:
             if mat in texmap:
                 np_.set_texture(self.T(texmap[mat], repeat=mat != "signs"))
             np_.set_two_sided(True)
-        self.refl.set_light_off(); self.refl.set_bin("background", 5); self.refl.set_color_scale(0.85, 0.8, 0.95, 1)
-        ground.set_light_off(); self.ground_np = ground
+        self.refl.set_light_off(); self.refl.set_bin("background", 5); self.refl.set_color_scale(0.78, 0.74, 0.88, 1)  # v1.0.5.4 quieter wet reflect
+        self.ground_np = ground  # v1.0.5.4: cinematic shaders light the ground
         # glows (additive, no depth write)
         for nm in ("_glow", "_pools"):
             if hasattr(self, nm):
@@ -1137,6 +1220,13 @@ class World:
         self.sky_day = self.sky.copy_to(self.app.camera); self.sky_day.set_compass(); self.sky_day.set_bin("background", 1)
         self.sky_day.set_texture(self.T("sky_day.jpg", repeat=True), 1); self.sky_day.set_transparency(TransparencyAttrib.M_alpha)
         self.sky_day.set_scale(0.98); self.sky_day.set_alpha_scale(0.0); self.sky_day.hide(); self.dayk = 0.0; self._dayfac = None
+        # v1.0.5.4: cel-shade SKY ONLY (Ana, Daniel, and cars are never cel-shaded)
+        try:
+            import fs_shaders
+            fs_shaders.apply_sky(self.sky, 0.0)
+            fs_shaders.apply_sky(self.sky_day, 1.0)
+        except Exception:
+            pass
 
     def set_daylight(self, k, warm=0.0):
         """k: 0 night .. 1 full day. warm: golden-hour tint amount. Neon/windows glow at night, reduced by day."""
@@ -1147,6 +1237,11 @@ class World:
             self.sky_day.set_color_scale(1.0, 1.0 - 0.18 * warm, 1.0 - 0.38 * warm, min(1.0, k * 1.15))
         else:
             self.sky_day.hide()
+        try:
+            if getattr(self, "sky", None) is not None: self.sky.set_shader_input("dayk", float(k))
+            if getattr(self, "sky_day", None) is not None: self.sky_day.set_shader_input("dayk", float(k))
+        except Exception:
+            pass
         day = k > 0.45
         if day != self._dayfac:
             self._dayfac = day

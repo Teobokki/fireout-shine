@@ -116,7 +116,7 @@ def build_body(p, name):
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(ob)
-    sub = ob.modifiers.new("sub", "SUBSURF"); sub.levels = 2; sub.render_levels = 2
+    sub = ob.modifiers.new("sub", "SUBSURF"); sub.levels = 3; sub.render_levels = 3  # v1.0.5.4 higher body detail
     bpy.context.view_layer.objects.active = ob; ob.select_set(True)
     bpy.ops.object.modifier_apply(modifier="sub")
     bpy.ops.object.shade_smooth()
@@ -442,7 +442,7 @@ def make(tname, p):
         if o: bpy.data.objects.remove(o, do_unlink=True)
     for o in list(bpy.data.objects):
         if o.type == "MESH" and (o.name in ("paint", "glass") or o.name.startswith("wheel_")):
-            d = o.modifiers.new("dec", "DECIMATE"); d.ratio = 0.22 if o.name.startswith("wheel_") else 0.35
+            d = o.modifiers.new("dec", "DECIMATE"); d.ratio = 0.35 if o.name.startswith("wheel_") else 0.50  # v1.0.5.4 denser traffic LOD
             bpy.context.view_layer.objects.active = o; bpy.ops.object.modifier_apply(modifier="dec")
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, "car_%s_lod.glb" % tname), export_format="GLB", use_selection=False,
                               export_apply=True, export_yup=True)

@@ -1,4 +1,4 @@
-"""Vehicles: original Blender-modelled cars + a carefully tuned, stable arcade driving model on a flat world
+"""Vehicles: original Blender-modelled cars (preserved look — never cel-shaded). + a carefully tuned, stable arcade driving model on a flat world
 (no flipping possible, sub-stepped collision against buildings/props/cars, auto-unstick)."""
 import math, os, random
 from panda3d.core import (NodePath, TextNode, CardMaker, TransparencyAttrib, ColorBlendAttrib, Vec3, Filename, LODNode)
@@ -99,11 +99,11 @@ class Car:
             self.lod.set_switch(0, far, 0.0); self.lod.set_switch(1, 5000.0, far)
 
     def make_shadow(self):
-        """v1.0.5.3: soft contact shadow / ambient occlusion under the car (multiplicative, never a glow)."""
-        cm = CardMaker("shadow"); hw, hl = self.spec["hw"] + 0.35, self.spec["hl"] + 0.45
+        """v1.0.5.4: soft contact shadow under the car (multiplicative darkening, never a glow/bloom)."""
+        cm = CardMaker("shadow"); hw, hl = self.spec["hw"] + 0.55, self.spec["hl"] + 0.70
         cm.set_frame(-hw, hw, -hl, hl)
-        q = self.np.attach_new_node(cm.generate()); q.set_p(-90); q.set_z(0.035)
-        q.set_texture(self.g.world.T("glow.png", repeat=False)); q.set_color(0, 0, 0, 0.62)
+        q = self.np.attach_new_node(cm.generate()); q.set_p(-90); q.set_z(0.032)
+        q.set_texture(self.g.world.T("glow.png", repeat=False)); q.set_color(0, 0, 0, 0.78)
         q.set_transparency(TransparencyAttrib.M_alpha); q.set_depth_write(False); q.set_depth_offset(2); q.set_bin("fixed", 5)
         q.set_light_off(); q.set_shader_off(1); self.shadow = q
 

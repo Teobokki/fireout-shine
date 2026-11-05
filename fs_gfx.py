@@ -1,8 +1,8 @@
-"""v1.0.5.3 graphics modes: 'RTX' (ULTRA) and 'EX HD'. Both share the cinematic grade (filmic curve, subtle LUT-style split toning,
-vignette, film grain - NO bloom, NO glow halos). EX HD looks almost the same as RTX: same models, textures, paint, lights, grade,
-reflections and city detail. It only trims hard-to-notice costs: a 128 px reflection cube-map refreshed every 2nd frame (RTX: 256 px
-every frame), 8x instead of 16x anisotropic filtering, road light pools on far cars culled a little earlier (85 m vs 140 m),
-traffic LOD switch at 95 m instead of 110 m and ~8% less distant traffic."""
+"""v1.0.5.4 graphics modes: 'RTX' (ULTRA) and 'EX HD'.
+Both modes are full HD cinematic: same models, HD city textures, paint, lights, filmic grade, film grain,
+16x anisotropic filtering, 256 px dynamic cube-map every frame, long LOD and light-pool distances.
+EX HD is no longer a cut-down mode. NO bloom, NO glow halos.
+©2026 EX Inc./HYPERION DIGITAL ©2026"""
 import os, re
 from panda3d.core import (Shader, Texture, FrameBufferProperties, BitMask32, NodePath, loadPrcFileData, SamplerState, PTA_float)
 
@@ -22,24 +22,23 @@ def detect(renderer):
 
 def pre_window(settings):
     """prc options that must be set before the window opens (applied on restart when the mode changes)."""
-    mode = settings.get("gfx") or "EXHD"
     ms = 4
     loadPrcFileData("", "depth-bits 24\ntexture-minfilter linear-mipmap-linear\ntexture-magfilter linear\n"
-                    "texture-anisotropic-degree %d\n" % (16 if mode == "RTX" else 8))
+                    "texture-anisotropic-degree 16\n")
     return ms
 
 
 def lod_far(app):
-    return 110.0 if app.settings.get("gfx") == "RTX" else 95.0
+    return 180.0  # v1.0.5.4 HD: keep full car models further out (both modes)
 
 
 def light_far(app):
     """distance after which a car's road light pools (headlight beam / brake pool) are culled"""
-    return 140.0 if app.settings.get("gfx") == "RTX" else 85.0
+    return 200.0  # v1.0.5.4 HD (both modes)
 
 
 def traffic_scale(app):
-    return 1.0 if app.settings.get("gfx") == "RTX" else 0.92
+    return 1.0  # v1.0.5.4 HD full traffic in both modes
 
 
 GV = """#version 120
@@ -51,19 +50,20 @@ GF = """#version 120
 uniform sampler2D scene; uniform float gtime; uniform float grain; varying vec2 uv;
 void main() {
   vec3 c = texture2D(scene, uv).rgb;
-  // filmic toe/shoulder (gentle S-curve), no bloom
+  // filmic toe/shoulder (stronger cinematic S-curve), no bloom / no glow
   c = clamp(c, 0.0, 1.0);
-  c = mix(c, c * c * (3.0 - 2.0 * c), 0.30);
+  c = mix(c, c * c * (3.0 - 2.0 * c), 0.42);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-  // LUT-style split toning: cool teal shadows, warm sodium highlights
-  c += vec3(-0.018, 0.006, 0.026) * (1.0 - l) * (1.0 - l) + vec3(0.030, 0.012, -0.022) * l * l;
-  c = mix(vec3(l), c, 1.08);
+  // LUT-style split toning: deeper teal shadows, warmer sodium highlights
+  c += vec3(-0.028, 0.008, 0.036) * (1.0 - l) * (1.0 - l) + vec3(0.038, 0.014, -0.028) * l * l;
+  c = mix(vec3(l), c, 1.12);
+  c = (c - 0.5) * 1.08 + 0.5;
   // vignette
   vec2 d = (uv - 0.5) * vec2(1.0, 0.82);
-  c *= mix(0.70, 1.0, smoothstep(0.78, 0.22, length(d)));
-  // film grain (luma-weighted, animated)
+  c *= mix(0.62, 1.0, smoothstep(0.82, 0.18, length(d)));
+  // film grain
   float n = fract(sin(dot(floor(gl_FragCoord.xy) + vec2(gtime * 137.0, gtime * 61.0), vec2(12.9898, 78.233))) * 43758.5453);
-  c += (n - 0.5) * grain * (0.6 + 0.4 * (1.0 - l));
+  c += (n - 0.5) * grain * (0.55 + 0.45 * (1.0 - l));
   gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
 }
 """
@@ -91,7 +91,7 @@ class Gfx:
                 self.fm = None; return
             self.quad.set_shader(Shader.make(Shader.SL_GLSL, GV, GF))
             self.quad.set_shader_input("scene", tex); self.quad.set_shader_input("gtime", self.gtime)
-            self.quad.set_shader_input("grain", 0.032)
+            self.quad.set_shader_input("grain", 0.028)
         except Exception as e:
             self.fm = None; self.app_log("grade: %r" % e)
 
@@ -138,7 +138,7 @@ class Gfx:
         app = self.app
         self.setup_grade()
         rtx = app.settings.get("gfx") == "RTX"
-        self.cube_on(True, 256 if rtx else 128); self.cube_every = 1 if rtx else 2
+        self.cube_on(True, 256); self.cube_every = 1  # v1.0.5.4 HD cube both modes
         g = getattr(app, "game", None)
         if g is not None:
             for c in getattr(g, "cars", []):

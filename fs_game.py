@@ -1989,11 +1989,17 @@ class Game:
         U.text(self.mm_root, "▲", (0, -0.016), 0.045, fg=(1, 1, 1, 1), font=a.jpfont)
         self.dist_lbl = U.text(self.mm_root, "", (0, -M - 0.05), 0.034, fg=U.CYAN)
         self.dist_lbl_jp = U.text(self.mm_root, "", (0, -M - 0.095), 0.03, fg=U.CYAN, font=a.jpfont)
-        # speed / nitro / health (bottom right, above buttons)
+        # circular speedometer (ring gauge around the speed number) + nitro + health
         br = a.a2dBottomRight
-        self.speed_t = U.text(br, "0", (-0.48, 0.64), 0.11, fg=(1, 1, 1, 1), align=TextNode.A_right)
-        self.kmh_t = U.text(br, "km/h", (-0.46, 0.64), 0.035, fg=U.CYAN, align=TextNode.A_left)
-        self.nitro_bar = U.bar(br, (-0.78, 0.6), 0.5, 0.012, 1.0, col=U.CYAN)
+        self.speedo_root = DirectFrame(parent=br, frameColor=(0, 0, 0, 0), pos=(-0.36, 0, 0.52))
+        self.speedo_track = self.speedo_root.attach_new_node("speedo-track")
+        self.speedo_fill = self.speedo_root.attach_new_node("speedo-fill")
+        self.speedo_vmax = 280.0          # ring tops out around typical top speed (km/h)
+        self.speedo_bucket = -1
+        self._build_speedo_track()
+        self.speed_t = U.text(self.speedo_root, "0", (0, 0.018), 0.095, fg=(1, 1, 1, 1))
+        self.kmh_t = U.text(self.speedo_root, "km/h", (0, -0.055), 0.028, fg=U.CYAN, font=U.FONT_PLAIN)
+        self.nitro_bar = U.bar(self.speedo_root, (-0.16, -0.145), 0.32, 0.009, 1.0, col=U.CYAN)
         self.hp_bar = U.bar(a.a2dTopLeft, (0.06, -0.47), 0.4, 0.01, 1.0, col=(0.3, 1, 0.45, 1))
         # top-left status
         tl = a.a2dTopLeft
@@ -2018,6 +2024,59 @@ class Game:
         self.fade_np.set_bin("fixed", 100); self.fade_k = 0.0
         self.btn_root = None; self.btn_state = None
         self.refresh_buttons()
+
+
+    def _speedo_arc(self, parent, r0, r1, a0, a1, segs, col, alpha=0.92):
+        """Flat arc ring segment in aspect2d space. No glow — solid colour only."""
+        import math
+        from panda3d.core import (GeomVertexFormat, GeomVertexData, GeomVertexWriter,
+                                  GeomTriangles, Geom, GeomNode, TransparencyAttrib)
+        vd = GeomVertexData("sa", GeomVertexFormat.get_v3c4(), Geom.UH_static)
+        vw = GeomVertexWriter(vd, "vertex"); cw = GeomVertexWriter(vd, "color")
+        tri = GeomTriangles(Geom.UH_static)
+        for k in range(segs + 1):
+            a = a0 + (a1 - a0) * (k / segs)
+            c, s = math.cos(a), math.sin(a)
+            for rr in (r0, r1):
+                vw.add_data3(c * rr, 0, s * rr)
+                cw.add_data4(col[0], col[1], col[2], alpha)
+            if k < segs:
+                i = k * 2
+                tri.add_vertices(i, i + 1, i + 3); tri.add_vertices(i, i + 3, i + 2)
+        gm = Geom(vd); gm.add_primitive(tri); gn = GeomNode("arc"); n = parent.attach_new_node(gn); gn.add_geom(gm)
+        n.set_transparency(TransparencyAttrib.M_alpha); n.set_bin("fixed", 50); n.set_depth_test(False); n.set_depth_write(False)
+        return n
+
+    def _build_speedo_track(self):
+        """Static dark track + soft ticks. Sweep is an open ring (bottom gap), modern racing HUD."""
+        import math
+        for ch in self.speedo_track.get_children(): ch.remove_node()
+        # open ring: about 270 deg, gap at the bottom
+        a0, a1 = math.radians(-210), math.radians(30)
+        self._speedo_a0, self._speedo_a1 = a0, a1
+        self._speedo_arc(self.speedo_track, 0.175, 0.205, a0, a1, 48, (0.08, 0.08, 0.12), 0.85)
+        self._speedo_arc(self.speedo_track, 0.168, 0.175, a0, a1, 48, (0.25, 0.9, 1.0), 0.35)   # thin inner accent, no bloom
+        # tick marks every 40 km/h
+        ticks = self.speedo_track.attach_new_node("ticks")
+        for i in range(8):
+            frac = i / 7.0
+            a = a0 + (a1 - a0) * frac
+            self._speedo_arc(ticks, 0.205, 0.218, a - 0.012, a + 0.012, 2, (0.7, 0.75, 0.85), 0.7)
+
+    def _set_speedo_fill(self, frac):
+        import math
+        for ch in self.speedo_fill.get_children(): ch.remove_node()
+        frac = max(0.0, min(1.0, frac))
+        if frac <= 0.001: return
+        a0, a1 = self._speedo_a0, self._speedo_a1
+        a = a0 + (a1 - a0) * frac
+        # colour shifts cool cyan -> warm pink as speed climbs (still flat, no glow)
+        t = frac
+        col = (0.25 + 0.75 * t, 0.90 - 0.55 * t, 1.0 - 0.40 * t)
+        segs = max(3, int(48 * frac))
+        self._speedo_arc(self.speedo_fill, 0.175, 0.205, a0, a, segs, col, 0.95)
+        # leading tip
+        self._speedo_arc(self.speedo_fill, 0.168, 0.218, a - 0.02, a + 0.02, 3, (1.0, 1.0, 1.0), 0.95)
 
     def portrait(self, who):
         return Filename.from_os_specific(os.path.join(self.app.BASE, "assets", "tex", "portrait_%s.png" % who)).get_fullpath()
@@ -2220,15 +2279,23 @@ class Game:
             if edge:
                 s_ = lim / max(abs(X), abs(Y)); X *= s_; Y *= s_
             ic.setPos(X, Y - 0.011); ic.setFg(m["col"] + ((0.75 if edge else 1.0),)); ic.setScale(0.026 if edge else 0.034)
-        # status
+        # status + circular speedometer
         c = self.pcar
         sp = c.speed * 3.6 if c else 0.0
-        self.speed_t.setText("%d" % sp if c else ""); self.kmh_t.setText("km/h" if c else "")
         hud_on = self.garage is None and self.home is None and self.camapp is None
+        if c and hud_on:
+            self.speedo_root.show()
+            self.speed_t.setText("%d" % int(sp)); self.kmh_t.setText("km/h")
+            bucket = int(sp) // 2
+            if bucket != self.speedo_bucket:
+                self.speedo_bucket = bucket
+                self._set_speedo_fill(sp / self.speedo_vmax)
+            self.nitro_bar[0].show(); self.nitro_bar[1].set_sx(max(0.001, c.nitro_amt))
+        else:
+            self.speedo_root.hide(); self.speed_t.setText(""); self.kmh_t.setText("")
+            self.nitro_bar[0].hide(); self.speedo_bucket = -1
         for n in (self.cash_t, self.stars_t, self.hp_bar[0], self.mm_root):
             n.show() if hud_on else n.hide()
-        self.nitro_bar[0].show() if c else self.nitro_bar[0].hide()
-        if c: self.nitro_bar[1].set_sx(max(0.001, c.nitro_amt))
         me = self.me(); self.hp_bar[1].set_sx(max(0.001, me.health / 100.0))
         self.cash_t.setText(fmt_cash_hud(self.cash))
         if self.cash_pop_k > 0:      # classic "+¥..." that rises and fades under the cash, cash flashes green
@@ -2507,4 +2574,6 @@ class Game:
                   self.pop1, self.pop2, self.dist_lbl, self.dist_lbl_jp):
             t.destroy()
         self.nitro_bar[0].destroy(); self.hp_bar[0].destroy()
+        try: self.speedo_root.destroy()
+        except Exception: pass
         for n in getattr(self, "btn_nodes", []): n.destroy()
